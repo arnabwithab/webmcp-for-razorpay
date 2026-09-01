@@ -1,0 +1,5 @@
+.header {
+  /* Re-skin (2026-07-10): token border; horizontal padding + width now come
+   * from `.page-width` on header__middle, vertical from `py-4`. */
+  border-bottom: 1px solid var(--border);
+}

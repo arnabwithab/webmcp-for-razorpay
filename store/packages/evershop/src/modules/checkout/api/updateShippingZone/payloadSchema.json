@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "country": { "type": "string" },
+    "countries": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "provinces": {}
+  },
+  "additionalProperties": true,
+  "required": ["name"]
+}

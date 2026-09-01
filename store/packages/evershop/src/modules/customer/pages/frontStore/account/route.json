@@ -1,0 +1,6 @@
+{
+  "methods": ["GET"],
+  "path": "/account",
+  "name": "Account page",
+  "editable": true
+}

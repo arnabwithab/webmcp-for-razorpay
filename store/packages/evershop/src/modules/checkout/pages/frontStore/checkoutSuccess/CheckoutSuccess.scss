@@ -1,0 +1,35 @@
+.checkout-success-customer-info {
+  form {
+    .form-submit-button {
+      padding-top: 0px;
+      border-top: 0;
+      button.button {
+        padding: 1.25rem;
+        font-weight: 400;
+      }
+    }
+    label {
+      color: var(--textSubdued);
+    }
+  }
+  a.button {
+    padding: 1.25rem;
+    font-weight: 400;
+    letter-spacing: 0.031rem;
+  }
+}
+.checkoutSuccess .wrapper {
+  .header {
+    margin-bottom: 0;
+  }
+  .footer {
+    margin-top: 0;
+  }
+}
+.checkout-success-customer-info {
+  padding-top: 3.125rem;
+}
+
+.checkoutSuccess .breadcrumb {
+  display: none;
+}

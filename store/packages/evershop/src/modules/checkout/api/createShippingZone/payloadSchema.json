@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "country": {
+      "type": "string",
+      "description": "Legacy single-country field. New clients should send `countries` (array)."
+    },
+    "countries": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Multi-country zone support (preferred). When provided, takes precedence over the legacy `country` field."
+    },
+    "provinces": {
+      "description": "Either a legacy array of province codes (single-country zone) OR an array of { country, province } pairs (multi-country zone)."
+    }
+  },
+  "additionalProperties": true,
+  "required": ["name"]
+}

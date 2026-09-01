@@ -1,0 +1,8 @@
+extend type Setting {
+  defaultProductTaxClassId: Int
+  defaultShippingTaxClassId: Int
+  baseCalculationAddress: String
+  taxRounding: String
+  taxPrecision: Int
+  taxRoundLevel: String
+}

@@ -1,0 +1,7 @@
+extend type Setting {
+  paypalPaymentStatus: Int
+  paypalClientId: String
+  paypalClientSecret: String
+  paypalWebhookId: String
+  paypalPaymentIntent: String
+}

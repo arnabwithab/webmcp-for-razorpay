@@ -1,0 +1,52 @@
+"""
+Represents a breadcrumb information.
+"""
+type Breadcrumb {
+  url: String!
+  title: String!
+}
+
+type OgInfo {
+  title: String
+  description: String
+  image: String
+  url: String
+  siteName: String
+  type: String
+  locale: String
+  twitterImage: String
+  twitterCard: String
+  twitterSite: String
+  twitterCreator: String
+  publishedTime: String
+  authors: [String]
+  tags: [String]
+}
+
+"""
+A hreflang alternate link for the current page in a given locale (or 'x-default').
+"""
+type Alternate {
+  hreflang: String!
+  href: String!
+}
+
+"""
+Represents a page information.
+"""
+type PageInfo {
+  url: String!
+  title: String!
+  description: String!
+  locale: String
+  keywords: [String!]
+  ogInfo: OgInfo
+  breadcrumbs: [Breadcrumb!]
+  favicon: String
+  canonicalUrl: String
+  alternates: [Alternate!]
+}
+
+extend type Query {
+  pageInfo: PageInfo
+}

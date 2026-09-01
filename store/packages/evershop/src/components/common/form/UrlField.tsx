@@ -1,0 +1,123 @@
+import { Tooltip } from '@components/common/form/Tooltip.js';
+import { getNestedError } from '@components/common/form/utils/getNestedError.js';
+import { useScopedFieldName } from '@components/common/page-builder/WidgetSettingsScope.js';
+import { Field, FieldError, FieldLabel } from '@components/common/ui/Field.js';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput
+} from '@components/common/ui/InputGroup.js';
+import { _ } from '@evershop/evershop/lib/locale/translate/_';
+import React from 'react';
+import {
+  useFormContext,
+  RegisterOptions,
+  FieldPath,
+  FieldValues,
+  Controller
+} from 'react-hook-form';
+
+interface UrlFieldProps<T extends FieldValues = FieldValues>
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'name' | 'type'> {
+  name: FieldPath<T>;
+  label?: string;
+  error?: string;
+  helperText?: string;
+  required?: boolean;
+  validation?: RegisterOptions<T>;
+  defaultValue?: string;
+  wrapperClassName?: string;
+  prefixIcon?: React.ReactNode;
+  suffixIcon?: React.ReactNode;
+}
+
+export function UrlField<T extends FieldValues = FieldValues>({
+  name,
+  label,
+  error,
+  wrapperClassName,
+  helperText,
+  required,
+  validation,
+  defaultValue,
+  className,
+  prefixIcon,
+  suffixIcon,
+  ...props
+}: UrlFieldProps<T>) {
+  const {
+    control,
+    formState: { errors }
+  } = useFormContext<T>();
+  const resolvedName = useScopedFieldName(name) as FieldPath<T>;
+
+  const fieldError = getNestedError(resolvedName, errors, error);
+  const fieldId = `field-${resolvedName}`;
+
+  const { valueAsNumber, valueAsDate, ...cleanValidation } = validation || {};
+  const validationRules = {
+    ...cleanValidation,
+    ...(required && {
+      required: _('${field} is required', { field: label || name })
+    }),
+    pattern: validation?.pattern || {
+      value: /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/,
+      message: _('Please enter a valid URL')
+    }
+  };
+
+  const inputClassName = `${fieldError !== undefined ? 'error' : ''} ${
+    className || ''
+  } ${prefixIcon ? '!pl-10' : ''} ${suffixIcon ? '!pr-10' : ''}`.trim();
+
+  const renderInput = () => (
+    <Controller
+      name={resolvedName}
+      control={control}
+      defaultValue={defaultValue as any}
+      rules={validationRules}
+      render={({ field }) => (
+        <InputGroupInput
+          {...field}
+          id={fieldId}
+          type="url"
+          className={inputClassName}
+          aria-invalid={fieldError !== undefined ? 'true' : 'false'}
+          aria-describedby={
+            fieldError !== undefined ? `${fieldId}-error` : undefined
+          }
+          {...props}
+        />
+      )}
+    />
+  );
+
+  return (
+    <Field
+      data-invalid={fieldError ? 'true' : 'false'}
+      className={wrapperClassName}
+    >
+      {label && (
+        <FieldLabel htmlFor={fieldId}>
+          <>
+            {label}
+            {required && <span className="text-destructive">*</span>}
+            {helperText && <Tooltip content={helperText} position="top" />}
+          </>
+        </FieldLabel>
+      )}
+      <InputGroup>
+        {renderInput()}
+        {prefixIcon && (
+          <InputGroupAddon align={'inline-start'}>{prefixIcon}</InputGroupAddon>
+        )}
+        {suffixIcon && (
+          <InputGroupAddon align={'inline-end'}>{suffixIcon}</InputGroupAddon>
+        )}
+      </InputGroup>
+      {fieldError && (
+        <FieldError id={`${fieldId}-error`}>{fieldError}</FieldError>
+      )}
+    </Field>
+  );
+}

@@ -1,0 +1,6 @@
+{
+  "methods": ["GET"],
+  "path": "/",
+  "name": "Home Page",
+  "editable": true
+}
