@@ -1,0 +1,212 @@
+{
+  "project": "agent-native-checkout-race",
+  "last_updated": "2026-09-01",
+  "summary": {
+    "total": 9,
+    "completed": 0,
+    "in_progress": 0,
+    "planned": 9,
+    "tests_passing": 0,
+    "tests_failing": 0,
+    "tests_missing": 9
+  },
+  "features": [
+    {
+      "id": "F001",
+      "name": "Store clone & verification",
+      "description": "Clone EverShop (default), seed catalog, camera test, verify license/Mongo cost, prove ≤2 source lines touched + counted webmcpify edits. Kill-switch >30min → swap to Medusa (spec §4).",
+      "status": "planned",
+      "priority": "high",
+      "module": "store/",
+      "design_doc": "docs/spec.md#4-the-clone",
+      "tests": {
+        "status": "missing",
+        "files": ["tests/test_store_clone.py"],
+        "notes": "assert clone boots :8000, seeded catalog non-empty, touch budget ≤2 lines"
+      },
+      "subtasks": [
+        { "id": "F001-1", "name": "clone + npm install + seed + boot :8000", "status": "planned" },
+        { "id": "F001-2", "name": "camera screenshot gate (UI criterion 1)", "status": "planned" },
+        { "id": "F001-3", "name": "document touch list (README) + license check", "status": "planned" }
+      ],
+      "notes": "Single service; pretty UI non-negotiable (spec criterion 1).",
+      "added": "2026-09-01",
+      "completed": null
+    },
+    {
+      "id": "F002",
+      "name": "Sidecar - Razorpay rail, events, poll, webhook",
+      "description": "FastAPI :9000: POST /checkout/create → Razorpay Payment Links (test-mode), POST /event (server ts authoritative, hash-chained), POST /webhook (HMAC), GET /poll/{id}, GET /compare, GET /audit. Re-price from snapshot, enforce MAX_AMOUNT_PAISE (spec §5-6).",
+      "status": "planned",
+      "priority": "high",
+      "module": "sidecar/app.py, sidecar/utils/config.py",
+      "design_doc": "docs/spec.md#5-architecture,docs/spec.md#6-the-kit",
+      "tests": {
+        "status": "missing",
+        "files": ["tests/test_checkout_cap.py", "tests/test_webhook_hmac.py", "tests/test_snapshot_repricing.py", "tests/test_poll_webhook.py"],
+        "notes": "spec §9: cap rejection (no link), HMAC forged rejected, poll-vs-webhook close, snapshot re-pricing ignores client amount"
+      },
+      "subtasks": [
+        { "id": "F002-1", "name": "config (pydantic-settings) + logger + CORS store-only", "status": "planned" },
+        { "id": "F002-2", "name": "POST /checkout/create (cap check, snapshot re-price, Razorpay Link)", "status": "planned" },
+        { "id": "F002-3", "name": "POST /event + hash chain append + GET /audit", "status": "planned" },
+        { "id": "F002-4", "name": "POST /webhook HMAC + GET /poll/{id} (poll-primary localhost)", "status": "planned" }
+      ],
+      "notes": "Client amount ignored; server ts authoritative (spec §6).",
+      "added": "2026-09-01",
+      "completed": null
+    },
+    {
+      "id": "F003",
+      "name": "Catalog snapshot - canonical pricing",
+      "description": "make snapshot → sidecar/snapshot.json [{sku, name, priceSource, pricePaise, priceInrLabel}] fixed conversion, relabel INR at snapshot (spec §6). Sidecar re-prices exclusively from snapshot.",
+      "status": "planned",
+      "priority": "high",
+      "module": "sidecar/snapshot.json, sidecar/snapshot.py",
+      "design_doc": "docs/spec.md#6-the-kit",
+      "tests": {
+        "status": "missing",
+        "files": ["tests/test_snapshot.py"],
+        "notes": "snapshot shape, INR relabel, conversion rate recorded, re-price path tested in F002"
+      },
+      "subtasks": [
+        { "id": "F003-1", "name": "make snapshot scraper from store catalog", "status": "planned" },
+        { "id": "F003-2", "name": "INR relabel + pricePaise + priceInrLabel + rate recorded", "status": "planned" }
+      ],
+      "notes": "Disclosure line on camera: test-mode relabeled to INR (spec §6, Q7).",
+      "added": "2026-09-01",
+      "completed": null
+    },
+    {
+      "id": "F004",
+      "name": "WebMCP store-native tools via webmcpify",
+      "description": "webmcpify owns 4 tools: search-catalog, show-product, add-to-cart, read-cart (DETECT→INVENTORY→INTEGRATE→VERIFY). Vendored runtime, .webmcpify/manifest.json, flag chrome://flags/#enable-webmcp-testing (spec §5.1).",
+      "status": "planned",
+      "priority": "high",
+      "module": "store/.webmcpify/, sidecar/static/loader.js",
+      "design_doc": "docs/spec.md#5.1-tooling",
+      "tests": {
+        "status": "missing",
+        "files": ["tests/test_webmcp_smoke.js"],
+        "notes": "JS smoke: getTools({fromOrigins:[STORE]}) returns 6 tools total (spec §9)"
+      },
+      "subtasks": [
+        { "id": "F004-1", "name": "npx skills add TueJon/webmcpify + inventory (zero code changes)", "status": "planned" },
+        { "id": "F004-2", "name": "approve manifest + integrate 4 store tools (exposedTo AGENT_ORIGIN)", "status": "planned" },
+        { "id": "F004-3", "name": "verify no collision with kit money tools (namespaced if needed)", "status": "planned" }
+      ],
+      "notes": "Fallback: webmaxru/web-ai-agent-skills if stalled (spec §5.1).",
+      "added": "2026-09-01",
+      "completed": null
+    },
+    {
+      "id": "F005",
+      "name": "Money kit + loader + manual arm",
+      "description": "kit/razorpay-agent-kit.js registers checkout/resume-checkout (cap bounded error, returns shortUrl chip), sidecar/static/loader.js injects kit+overlay with MutationObserver re-inject (R3), kit/manual-arm.js capture listeners + Start/Pay overlay + inferred events (spec §6, §8).",
+      "status": "planned",
+      "priority": "high",
+      "module": "kit/razorpay-agent-kit.js, kit/manual-arm.js, sidecar/static/loader.js",
+      "design_doc": "docs/spec.md#6-the-kit",
+      "tests": {
+        "status": "missing",
+        "files": ["tests/test_resume_semantics.py", "tests/test_audit_hashchain.py"],
+        "notes": "resume pending→same url / expired→mint fresh + recovered; hash chain sha256(prev_line); popup chip fix (R2)"
+      },
+      "subtasks": [
+        { "id": "F005-1", "name": "razorpay-agent-kit.js: checkout + resume-checkout + audit + cap", "status": "planned" },
+        { "id": "F005-2", "name": "loader.js: inject kit + manual-arm + MutationObserver", "status": "planned" },
+        { "id": "F005-3", "name": "manual-arm.js: capture listeners (results_viewed/product_viewed/cart_updated), overlay Start/Pay", "status": "planned" }
+      ],
+      "notes": "Checkout returns shortUrl; agent renders Open payment chip (popup-blocker fix, spec §6).",
+      "added": "2026-09-01",
+      "completed": null
+    },
+    {
+      "id": "F006",
+      "name": "Agent backend + iframe loop",
+      "description": "agent/app.py :8001 stateless POST /agent/turn Gemini gemini-2.5-flash proxy (key never in browser), iframe allow=tools; agent/static/agent.js loop getTools→/agent/turn→executeTool with chips, 8-turn/60s cap + AbortController (spec §7).",
+      "status": "planned",
+      "priority": "high",
+      "module": "agent/app.py, agent/static/agent.js",
+      "design_doc": "docs/spec.md#7-in-browser-agent",
+      "tests": {
+        "status": "missing",
+        "files": ["tests/test_agent_turn.py"],
+        "notes": "stateless proxy, key not leaked, turn cap 8/60s, system prompt contains tool-only + resume guidance"
+      },
+      "subtasks": [
+        { "id": "F006-1", "name": "FastAPI /agent/turn proxy + CORS store-only + /static/loader.js", "status": "planned" },
+        { "id": "F006-2", "name": "iframe wiring + getTools({fromOrigins:[STORE]}) + exposedTo", "status": "planned" },
+        { "id": "F006-3", "name": "client loop + chips (searching→found→added→checkout→pending) + AbortController", "status": "planned" }
+      ],
+      "notes": "System prompt inline per spec §7; latency disclosed on delta card (spec §8).",
+      "added": "2026-09-01",
+      "completed": null
+    },
+    {
+      "id": "F007",
+      "name": "Race protocol, compare & audit",
+      "description": "3-5 fixed intents, manual inferred events + agent tool events share same event schema, server ts closes tasks; sidecar/compare.py groups by (task_id,arm) medians; GET /compare renders per-task + median deltas; audit.jsonl hash-chained, make verify-audit recomputes (spec §8).",
+      "status": "planned",
+      "priority": "high",
+      "module": "sidecar/compare.py, sidecar/app.py",
+      "design_doc": "docs/spec.md#8-the-race-protocol",
+      "tests": {
+        "status": "missing",
+        "files": ["tests/test_compare.py", "tests/test_audit_verify.py"],
+        "notes": "metrics discovery/decision/checkout/total (task_start→payment_paid), median across tasks, hash recompute"
+      },
+      "subtasks": [
+        { "id": "F007-1", "name": "audit schema + server ts + prev_hash=sha256(prev_line) append", "status": "planned" },
+        { "id": "F007-2", "name": "compare.py grouping + medians + GET /compare rendering", "status": "planned" },
+        { "id": "F007-3", "name": "make verify-audit + symmetry rule (identical payment mechanics)", "status": "planned" }
+      ],
+      "notes": "Delta card states: same rail/catalog, agent time includes model latency, single take (spec §8).",
+      "added": "2026-09-01",
+      "completed": null
+    },
+    {
+      "id": "F008",
+      "name": "Recovery ladder - Track 03",
+      "description": "Decline → pending chip → resume-checkout (pending re-open, expired mint fresh + recovered) → paid; all steps in audit; cap rejection replayed once (spec G7/SC6, §6 resume semantics).",
+      "status": "planned",
+      "priority": "high",
+      "module": "kit/razorpay-agent-kit.js, sidecar/app.py",
+      "design_doc": "docs/spec.md#6-the-kit,docs/spec.md#2-goals",
+      "tests": {
+        "status": "missing",
+        "files": ["tests/test_recovery_ladder.py"],
+        "notes": "pending vs expired semantics + audit contains recovered event"
+      },
+      "subtasks": [
+        { "id": "F008-1", "name": "resume-checkout pending vs expired branching", "status": "planned" },
+        { "id": "F008-2", "name": "audit recovered event + chip offer after decline", "status": "planned" }
+      ],
+      "notes": "In-session recovery only; Track 03 evidence ladder (spec §6).",
+      "added": "2026-09-01",
+      "completed": null
+    },
+    {
+      "id": "F009",
+      "name": "Makefile, tests & runbook",
+      "description": "Root Makefile canonical control surface (store/dev/snapshot/reset/test/verify-audit/style/clean/setup), pytest + 1 JS smoke per spec §9, docs/runbook.md one-take OBS tiled recording + runbook step 0: chrome://version + flag + throwaway getTools().",
+      "status": "planned",
+      "priority": "medium",
+      "module": "Makefile, tests/, docs/runbook.md",
+      "design_doc": "docs/spec.md#9-repo-shape,docs/spec.md#11-demo-script",
+      "tests": {
+        "status": "missing",
+        "files": ["tests/test_makefile_targets.py"],
+        "notes": "make test covers §9 list; make verify-audit passes on camera; make help/grep self-doc"
+      },
+      "subtasks": [
+        { "id": "F009-1", "name": "Makefile targets + make help descriptions", "status": "planned" },
+        { "id": "F009-2", "name": "pytest harness + JS smoke (6 tools) + verify-audit", "status": "planned" },
+        { "id": "F009-3", "name": "docs/runbook.md + README touch list + env.example", "status": "planned" }
+      ],
+      "notes": "make style = black+ruff; make reset re-seeds catalog/carts between takes (spec §9).",
+      "added": "2026-09-01",
+      "completed": null
+    }
+  ]
+}
