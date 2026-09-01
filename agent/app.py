@@ -161,7 +161,7 @@ input{width:70%;padding:8px;border-radius:8px;border:1px solid #d4d4d8}
 <input id="q" placeholder="what do you want to buy?"><button id="send">Go</button><button id="stop">STOP</button>
 </div>
 <script src="http://localhost:9000/kit/razorpay-agent-kit.js"></script>
-<script src="/static/agent.js"></script>
+<script src="/static/agent.js?v=3"></script>
 </body></html>"""
 
 

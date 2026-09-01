@@ -87,11 +87,14 @@
 
       chip('thinking…');
       var tools = await getTools();
+      var serializableTools = tools.map(function (t) {
+        return { name: t.name, description: t.description, parameters: t.parameters };
+      });
       var resp = await fetch('/agent/turn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: abort.signal,
-        body: JSON.stringify({ messages: messages, tools: tools }),
+        body: JSON.stringify({ messages: messages, tools: serializableTools }),
       });
       if (!resp.ok) throw new Error('turn failed ' + resp.status);
       var body = await resp.json();
