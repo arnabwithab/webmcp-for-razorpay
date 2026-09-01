@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import httpx
@@ -17,9 +18,7 @@ app.add_middleware(
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/" "gemini-2.5-flash:generateContent"
-)
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # spec §7 system prompt, inline
 SYSTEM_PROMPT = (
@@ -30,11 +29,72 @@ SYSTEM_PROMPT = (
 )
 
 
+def _to_groq_messages(internal: list[dict]) -> list[dict]:
+    """Internal parts-based messages -> OpenAI-style messages with tool_call id pairing."""
+    out: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    call_id = None
+    n = 0
+    for msg in internal:
+        for part in msg.get("parts", []):
+            if "text" in part:
+                out.append(
+                    {
+                        "role": "user" if msg["role"] == "user" else "assistant",
+                        "content": part["text"],
+                    }
+                )
+            elif "functionCall" in part:
+                call = part["functionCall"]
+                n += 1
+                call_id = f"call_{n}"
+                out.append(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "id": call_id,
+                                "type": "function",
+                                "function": {
+                                    "name": call["name"],
+                                    "arguments": json.dumps(call.get("args", {})),
+                                },
+                            }
+                        ],
+                    }
+                )
+            elif "functionResponse" in part:
+                resp_part = part["functionResponse"]
+                out.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id or "call_0",
+                        "name": resp_part["name"],
+                        "content": json.dumps(resp_part.get("response", {})),
+                    }
+                )
+    return out
+
+
+def _from_groq(message: dict) -> dict:
+    """OpenAI-style assistant message -> internal parts shape."""
+    parts: list[dict] = []
+    for call in message.get("tool_calls") or []:
+        fn = call["function"]
+        try:
+            args = json.loads(fn.get("arguments") or "{}")
+        except json.JSONDecodeError:
+            args = {}
+        parts.append({"functionCall": {"name": fn["name"], "args": args}})
+    if message.get("content"):
+        parts.append({"text": message["content"]})
+    return {"parts": parts}
+
+
 def generate_turn(payload: dict) -> dict:
-    """One stateless Gemini call. Payload: {request_body}. Returns the raw Gemini response."""
+    """One stateless Groq call (OpenAI-compatible). Returns the raw Groq response."""
     resp = httpx.post(
-        GEMINI_URL,
-        params={"key": settings.gemini_api_key},
+        GROQ_URL,
+        headers={"Authorization": f"Bearer {settings.groq_api_key}"},
         json=payload["request_body"],
         timeout=30,
     )
@@ -45,45 +105,47 @@ def generate_turn(payload: dict) -> dict:
 @app.post("/agent/turn")
 async def agent_turn(request: Request):
     body = await request.json()
-    contents = [{"role": m["role"], "parts": m["parts"]} for m in body.get("messages", [])]
-    declarations = [
+    tools = [
         {
-            "name": t["name"],
-            "description": t.get("description", ""),
-            "parameters": t.get("parameters", {"type": "object", "properties": {}}),
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t.get("description", ""),
+                "parameters": t.get("parameters", {"type": "object", "properties": {}}),
+            },
         }
         for t in body.get("tools", [])
     ]
     request_body = {
-        "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-        "contents": contents,
-        "generationConfig": {"temperature": 0.2},
+        "model": settings.groq_model,
+        "messages": _to_groq_messages(body.get("messages", [])),
+        "temperature": 0.2,
     }
-    if declarations:
-        request_body["tools"] = [{"function_declarations": declarations}]
+    if tools:
+        request_body["tools"] = tools
 
     try:
         raw = generate_turn({"request_body": request_body})
     except Exception as err:
-        logger.error(f"gemini turn failed: {err}")
+        logger.error(f"groq turn failed: {err}")
         raise HTTPException(status_code=502, detail={"code": "model_error"})
 
-    parts = raw.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-    return {"parts": parts}
+    message = raw.get("choices", [{}])[0].get("message", {})
+    return _from_groq(message)
 
 
 @app.get("/agent", response_class=HTMLResponse)
 def agent_panel():
     return """<!doctype html><html><head><meta charset="utf-8"><title>agent</title>
 <style>
-body{font-family:system-ui,sans-serif;margin:0;padding:12px;background:#fafafa}
-#chat{height:340px;overflow-y:auto;font-size:13px}
-.msg{margin:6px 0;padding:8px 10px;border-radius:10px;max-width:90%}
-.user{background:#0b6bcb;color:#fff;margin-left:auto}
-.model{background:#e4e4e7}
-.chip{display:inline-block;background:#fef08a;border-radius:999px;padding:2px 10px;font-size:12px;margin:2px}
-button{padding:8px 14px;border-radius:999px;border:0;background:#0b6bcb;color:#fff;cursor:pointer}
-input{width:70%;padding:8px;border-radius:8px;border:1px solid #d4d4d8}
+body{{font-family:system-ui,sans-serif;margin:0;padding:12px;background:#fafafa}}
+#chat{{height:340px;overflow-y:auto;font-size:13px}}
+.msg{{margin:6px 0;padding:8px 10px;border-radius:10px;max-width:90%}}
+.user{{background:#0b6bcb;color:#fff;margin-left:auto}}
+.model{{background:#e4e4e7}}
+.chip{{display:inline-block;background:#fef08a;border-radius:999px;padding:2px 10px;font-size:12px;margin:2px}}
+button{{padding:8px 14px;border-radius:999px;border:0;background:#0b6bcb;color:#fff;cursor:pointer}}
+input{{width:70%;padding:8px;border-radius:8px;border:1px solid #d4d4d8}}
 </style></head>
 <body>
 <div id="chat"></div>

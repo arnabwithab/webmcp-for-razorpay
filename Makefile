@@ -9,9 +9,8 @@ help: ## list targets
 db: ## start postgres container for the store (evershop v2.2.1 is postgres, not mongo)
 	@docker start rzp-postgres 2>/dev/null || docker run -d --name rzp-postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=evershop -e POSTGRES_DB=evershop -p 5432:5432 postgres:16
 
-setup: ## idempotent install: store clone + deps, python deps, .env
-	@if [ ! -d store ]; then git clone --depth 1 https://github.com/evershopcommerce/evershop store; fi
-	@if [ ! -f store/config/local.json ]; then mkdir -p store/config && printf '{\n  "shop": { "language": "en", "timezone": "UTC", "currency": "USD", "weightUnit": "kg", "homeUrl": "http://localhost:8000" },\n  "system": { "file_storage": "local", "port": 8000, "session": { "cookieSecret": "dev-demo-secret" } }\n}\n' > store/config/local.json; fi
+setup: ## idempotent install: store deps, python deps, .env
+	@if [ ! -f store/config/local.json ]; then mkdir -p store/config && printf '{\n  "shop": { "language": "en", "timezone": "UTC", "currency": "INR", "weightUnit": "kg", "homeUrl": "http://localhost:8000" },\n  "system": { "file_storage": "local", "port": 8000, "session": { "cookieSecret": "dev-demo-secret" } },\n  "extensions": [{ "name": "session-shim", "resolve": "extensions/session-shim", "enabled": true }]\n}\n' > store/config/local.json; fi
 	@cd store && npm install
 	@if [ ! -d store/packages/evershop/dist ]; then cd store && npx tsc -p packages/evershop/tsconfig.json && npx copyfiles -u 1 "packages/evershop/src/**/*.{graphql,scss,css,json}" packages/evershop/dist; fi
 	@uv sync
@@ -21,8 +20,8 @@ store: ## build (if needed) + run store in prod mode on :8000 (fast; dev mode is
 	@if [ ! -f store/.evershop-built ]; then cd store && DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=evershop DB_NAME=evershop npm run build && touch .evershop-built; fi
 	@cd store && DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=evershop DB_NAME=evershop PORT=8000 npm run start
 
-seed: ## seed demo catalog (once; needs postgres up)
-	@cd store && DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=evershop DB_NAME=evershop node packages/evershop/dist/bin/evershop.js seed --all
+seed: ## seed fashion catalog (re-runnable; needs postgres up)
+	@cd store && DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=evershop DB_NAME=evershop node ../scripts/seed_fashion.js
 
 dev: ## run sidecar :9000 + agent backend :8001 concurrently
 	@trap 'kill 0' EXIT; \
@@ -33,9 +32,10 @@ dev: ## run sidecar :9000 + agent backend :8001 concurrently
 snapshot: ## catalog snapshot -> sidecar/snapshot.json (store must be up on :8000)
 	@uv run python -m sidecar.snapshot
 
-reset: ## clear audit + links between takes (store re-seed: see docs/runbook.md)
+reset: ## re-seed fashion catalog + clear carts/audit/links between takes
 	@rm -f audit.jsonl sidecar/links.json
-	@echo "sidecar state cleared"
+	@$(MAKE) seed
+	@echo "sidecar state cleared, catalog re-seeded"
 
 test: ## pytest + js smoke (cap, HMAC, hash-chain, poll, re-pricing, resume, 6 tools)
 	@uv run pytest -q

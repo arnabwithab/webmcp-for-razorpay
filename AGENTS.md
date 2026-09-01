@@ -18,29 +18,31 @@ Agent-Native Checkout Race for Razorpay Buildathon (Tracks 01 Agentic Commerce +
 
 ## Tech Stack
 
-- **Store (cloned, not built):** EverShop (Node + Mongo) - single service, seeded catalog, pretty UI per spec §4. Fallbacks: Medusa Next.js starter. Django Oscar eliminated (dated UI). `store/` is a clone with <=2 source lines touched (kit script tag + checkout hookup); runtime injection via `loader.js`.
-- **Sidecar :9000:** FastAPI (Python) - `POST /checkout/create`, `POST /event`, `POST /webhook` (HMAC), `GET /poll/{id}`, `GET /compare`, `GET /audit`. Server-authoritative timers, hash-chained audit (`audit.jsonl`), snapshot re-pricing.
-- **Agent backend :8001:** FastAPI (Python) - `POST /agent/turn` (stateless Gemini `gemini-2.5-flash` proxy, key never in browser), `GET /static/loader.js`, serves `agent` iframe.
+- **Store (cloned, committed in-repo):** EverShop v2.2.1 (Node + **Postgres** — v2.2.1 dropped Mongo; spec's Mongo note is stale), `store/` tracked as plain files (its `.git` removed), GPL-3.0 with credits in `store/CREDITS.md`. Catalog: 22 fashion products, Kids/Women/Men/Accessories, realistic INR pricing (₹299–₹2,999), local images in `store/media/fashion/`, featured grid on homepage. Re-seed: `make seed` (scripts/seed_fashion.js).
+- **Sidecar :9000:** FastAPI (Python) - `POST /checkout/create`, `POST /event`, `POST /webhook` (HMAC), `GET /poll/{id}`, `GET /compare`, `GET /audit`. Server-authoritative timers, hash-chained audit (`audit.jsonl`), snapshot re-pricing (INR-native — no currency conversion).
+- **Agent backend :8001:** FastAPI (Python) - `POST /agent/turn` (stateless Groq proxy — OpenAI-compatible chat.completions, `openai/gpt-oss-120b`, key never in browser), `GET /static/loader.js`, serves `agent` iframe.
 - **Kit / Frontend injected:** Vanilla JS - `kit/razorpay-agent-kit.js` (money tools `checkout`/`resume-checkout`), `kit/manual-arm.js` (capture listeners, overlay), `agent/static/agent.js` (client loop `getTools` -> `/agent/turn` -> `executeTool`). WebMCP via `webmcpify` (vendored runtime, `/.webmcpify/manifest.json`).
-- **Database:** Mongo (store) + SQLite/file for sidecar audit + `sidecar/snapshot.json` (canonical prices). No external DB for sidecar.
+- **Database:** Postgres (docker `rzp-postgres`, `make db`) for store + SQLite/file for sidecar audit + `sidecar/snapshot.json` (canonical prices, INR). No external DB for sidecar.
 - **Package Manager:** `uv` (Python), `npm` (store). Never `pip` directly.
 - **Build/Task Runner:** **Make** - root `Makefile` is the single entry point.
 - **Styling:** Store's own UI (criterion #1, non-negotiable per spec §4) - never retheme.
-- **State/LLM:** Gemini free tier only; Razorpay test keys only; localhost only (spec G6).
+- **State/LLM:** Groq free tier (`gpt-oss-120b`, ~1K RPM vs Gemini's ~10 — spec R5 motivation), Razorpay test keys only, localhost only (spec G6, LLM amended user-approved).
 
 ## Key Commands
 
 All commands runnable via `make <target>` from project root. Tools (`uvicorn`, `npm`, etc.) are Makefile internals only.
 
 ```bash
-make store        # run cloned store on :8000
+make store        # build (if needed) + run cloned store in prod mode on :8000
 make dev          # run sidecar :9000 + agent backend :8001 concurrently
-make snapshot     # catalog snapshot -> sidecar/snapshot.json (canonical pricing)
-make reset        # re-seed catalog + clear carts between takes
+make db           # start postgres container (store DB)
+make seed         # seed fashion catalog (scripts/seed_fashion.js, re-runnable)
+make snapshot     # catalog snapshot -> sidecar/snapshot.json (canonical INR pricing)
+make reset        # re-seed catalog + clear carts/audit/links between takes
 make test         # pytest + 1 JS smoke (cap, HMAC, hash-chain, poll, re-pricing, resume, 6 tools)
 make verify-audit # recompute hash chain: prev_hash = sha256(prev_line)
 make style        # black + ruff (format + lint + import sort)
-make build        # production build (if any)
+make build        # no-op (spec §3: no production deploy)
 make clean        # remove artifacts, caches, __pycache__, audit.jsonl (gitignored)
 make setup        # idempotent install/sync for store + sidecar + agent
 ```
@@ -53,7 +55,11 @@ From spec §9 (authoritative):
 
 ```
 .
-├── store/                       # cloned EverShop - <=2 source lines + counted webmcpify edits
+├── store/                       # EverShop v2.2.1 in-repo (its .git removed) - <=2 source lines + counted edits (see README)
+│   ├── media/fashion/           # local product images (Unsplash, credited)
+│   ├── extensions/session-shim/ # 6-line upstream-bug workaround (counted in README)
+│   └── CREDITS.md               # EverShop attribution (GPL-3.0)
+├── scripts/seed_fashion.js      # re-runnable fashion catalog seed (data, not store source)
 ├── sidecar/
 │   ├── app.py                   # :9000 checkout, /event, /webhook(HMAC), /poll, /compare, /audit
 │   ├── compare.py               # groups audit by (task_id, arm); medians
@@ -110,7 +116,8 @@ class Settings(BaseSettings):
     razorpay_key_id: str
     razorpay_key_secret: str
     razorpay_webhook_secret: str
-    gemini_api_key: str
+    groq_api_key: str
+    groq_model: str = "openai/gpt-oss-120b"
     max_amount_paise: int = 500000
 
 settings = Settings()
@@ -223,12 +230,12 @@ Defined in `~/.config/opencode/agents/`, model `opencode-go/deepseek-v4-flash`.
 
 ## Project-Specific Notes
 
-- **External APIs:** Razorpay Payment Links **test-mode only** — authoritative docs: https://razorpay.com/docs/api/payment-links/ (link creation) and https://razorpay.com/docs/webhooks/ (HMAC verification). `RAZORPAY_KEY_ID/SECRET/WEBHOOK_SECRET`, Gemini `gemini-2.5-flash` (free tier, `GEMINI_API_KEY`). Keys via `.env`, never committed. Test-mode only, never live.
-- **Store choice:** EverShop default (Node+Mongo). Criteria ranked in spec §4: (1) pretty UI non-negotiable, (2) single service, (3) stable DOM, (4) seeded catalog, (5) cart POST, (6) license, (7) install <=30min. Verify license + Mongo cost in spike.
+- **External APIs:** Razorpay Payment Links **test-mode only** — authoritative docs: https://razorpay.com/docs/api/payment-links/ (link creation) and https://razorpay.com/docs/webhooks/ (HMAC verification). `RAZORPAY_KEY_ID/SECRET/WEBHOOK_SECRET`, Groq `openai/gpt-oss-120b` (free tier, `GROQ_API_KEY`, docs: https://console.groq.com/docs/models). Keys via `.env`, never committed. Test-mode only, never live.
+- **Store choice:** EverShop v2.2.1 committed in-repo (Node+Postgres). Criteria ranked in spec §4: (1) pretty UI non-negotiable, (2) single service, (3) stable DOM, (4) seeded catalog, (5) cart POST, (6) license, (7) install <=30min. License verified (GPL-3.0, demo use).
 - **webmcpify:** `npx skills add TueJon/webmcpify` (MIT, opencode-compatible). Owns 4 store-native tools (`search-catalog`, `show-product`, `add-to-cart`, `read-cart`). Our kit owns 2 money tools (`checkout`, `resume-checkout`). 6 total, verified via `getTools({fromOrigins:[STORE]})` in flag-enabled Chrome (`chrome://flags/#enable-webmcp-testing`).
 - **Ports:** store :8000, agent :8001, sidecar :9000. Two Chrome profiles (separate cookie jars), one OBS take, tiled windows (spec §5, §8).
 - **Audit:** `audit.jsonl` hash-chained (`prev_hash = sha256(prev_line)`), server `ts` authoritative, `make verify-audit` recomputes. `POST /event` schema: `{ts, session_id, arm, task_id, event, tool?, payload?, prev_hash}`.
 - **Recovery (Track 03):** decline -> pending chip -> `resume-checkout` -> expired mints fresh link -> paid; all in audit (spec G7/SC6).
-- **Spike kill-switch:** >30 min or weak UI -> swap candidate immediately (spec §4).
-- **Never touch:** `store/` beyond the 2-line budget without listing in README; `audit.jsonl` (gitignored, append-only); pinned Chrome build (document `chrome://version` per spec R8).
-- **Known gotchas:** popup blocker (chip-button fix, spec R2), SPA nav kills injection (MutationObserver, R3), webhooks unreachable on localhost (poll-primary, R4), Gemini RPM/latency (8-turn/60s cap, chips narrate latency, R5).
+- **Spike kill-switch:** >30 min or weak UI -> swap candidate immediately (spec §4). (Resolved: EverShop kept, camera pass pending user review.)
+- **Never touch:** `store/` beyond the 2-line budget without listing in README (tracked edits: config/local.json, media/fashion/, extensions/session-shim, CREDITS.md); `audit.jsonl` (gitignored, append-only); pinned Chrome build (document `chrome://version` per spec R8).
+- **Known gotchas:** popup blocker (chip-button fix, spec R2), SPA nav kills injection (MutationObserver, R3), webhooks unreachable on localhost (poll-primary, R4), Groq RPM/latency (8-turn/60s cap, chips narrate latency, R5), EverShop public GraphQL `products` query capped at 20 items (snapshot fetches per-category).

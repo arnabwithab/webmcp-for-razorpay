@@ -1,34 +1,31 @@
-"""Catalog snapshot: canonical pricing, INR relabel at fixed rate (spec §6)."""
+"""Catalog snapshot: canonical pricing, INR-native (spec §6, amended: store prices INR)."""
 
 import json
 from pathlib import Path
 
 import httpx
 
-from sidecar.utils.config import settings
 from sidecar.utils.logger import logger
-
-# Fixed conversion rate, recorded per item via priceSource/pricePaise (derivable + auditable).
-USD_TO_INR = 83.0
 
 SNAPSHOT_PATH = Path(__file__).resolve().parent / "snapshot.json"
 
 
-def build_snapshot(products: list[dict], usd_to_inr: float = USD_TO_INR) -> list[dict]:
+def build_snapshot(products: list[dict]) -> list[dict]:
     items = []
     for product in products:
-        price_usd = (product.get("price") or {}).get("regular", {}).get("value")
-        if price_usd is None:
+        price = (product.get("price") or {}).get("regular", {}) or {}
+        price_inr = price.get("value")
+        if price_inr is None:
             variant_prices = [v["price"] for v in product.get("variants", []) if v.get("price")]
             if not variant_prices:
                 continue
-            price_usd = min(variant_prices)
-        paise = round(price_usd * usd_to_inr * 100)
+            price_inr = min(variant_prices)
+        paise = round(price_inr * 100)
         items.append(
             {
                 "sku": str(product.get("sku") or product.get("product_id")),
                 "name": product.get("name", ""),
-                "priceSource": {"value": price_usd, "currency": "USD"},
+                "priceSource": {"value": price_inr, "currency": price.get("currency", "INR")},
                 "pricePaise": paise,
                 "priceInrLabel": f"₹{paise / 100:,.2f}",
             }
@@ -37,28 +34,27 @@ def build_snapshot(products: list[dict], usd_to_inr: float = USD_TO_INR) -> list
 
 
 def fetch_catalog(base_url: str) -> list[dict]:
-    """Fetch seeded catalog from the store's public GraphQL API (paginated)."""
+    """Fetch seeded catalog from the store's public GraphQL API.
+
+    The top-level `products` query is capped at 20 items with no pagination args,
+    so fetch per-category (categories query has no such cap; 4 categories x <=6 products).
+    """
     query = """
-    query ($page: Int) {
-      products (page: $page) {
-        items { productId name sku price { regular { value currency } } }
-        total
+    {
+      categories {
+        items {
+          name
+          products { items { productId name sku price { regular { value currency } } } }
+        }
       }
     }
     """
-    products, page = [], 1
-    while True:
-        resp = httpx.post(
-            f"{base_url}/api/graphql",
-            json={"query": query, "variables": {"page": page}},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()["data"]["products"]
-        products.extend(data["items"])
-        if len(products) >= data["total"] or not data["items"]:
-            return products
-        page += 1
+    resp = httpx.post(f"{base_url}/api/graphql", json={"query": query}, timeout=15)
+    resp.raise_for_status()
+    items = []
+    for category in resp.json()["data"]["categories"]["items"]:
+        items.extend((category.get("products") or {}).get("items", []))
+    return items
 
 
 def make_snapshot(store_origin: str, out_path: Path = SNAPSHOT_PATH):
@@ -70,5 +66,5 @@ def make_snapshot(store_origin: str, out_path: Path = SNAPSHOT_PATH):
 
 
 if __name__ == "__main__":
-    items = make_snapshot(settings.store_origin)
+    items = make_snapshot("http://localhost:8000")
     print(f"snapshot: {len(items)} items -> {SNAPSHOT_PATH}")

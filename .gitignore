@@ -11,12 +11,13 @@ __pycache__/
 # generated data (append-only at runtime, never committed)
 audit.jsonl
 sidecar/links.json
+logs/
 
 # node
 node_modules/
-
-# store clone (recreated via `make setup`; pinned commit in README)
-store/
+store/packages/*/dist/
+store/.evershop/
+store/.evershop-built/
 
 # OS / editor
 .DS_Store

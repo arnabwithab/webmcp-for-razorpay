@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     port: int = 8001
     store_origin: str = "http://localhost:8000"
     sidecar_origin: str = "http://localhost:9000"
-    gemini_api_key: str
+    groq_api_key: str
+    groq_model: str = "openai/gpt-oss-120b"
 
 
 settings = Settings()

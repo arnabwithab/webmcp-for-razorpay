@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -10,12 +12,12 @@ def client():
     return TestClient(app)
 
 
-def test_turn_proxies_gemini_with_system_prompt_and_tools(client, monkeypatch):
+def test_turn_proxies_groq_with_system_prompt_and_tools(client, monkeypatch):
     captured = {}
 
     def fake_generate(payload):
         captured.update(payload)
-        return {"candidates": [{"content": {"parts": [{"text": "found it"}]}}]}
+        return {"choices": [{"message": {"role": "assistant", "content": "found it"}}]}
 
     monkeypatch.setattr(app_module, "generate_turn", fake_generate)
     resp = client.post(
@@ -30,28 +32,99 @@ def test_turn_proxies_gemini_with_system_prompt_and_tools(client, monkeypatch):
     assert resp.status_code == 200
     assert resp.json() == {"parts": [{"text": "found it"}]}
     sent = captured["request_body"]
-    # system prompt inline per spec §7
-    assert "resume-checkout" in sent["system_instruction"]["parts"][0]["text"]
-    assert sent["tools"][0]["function_declarations"][0]["name"] == "search-catalog"
-    # stateless: contents mirror client-sent messages only
-    assert sent["contents"][0]["role"] == "user"
+    # system prompt inline per spec §7, as first OpenAI-style message
+    assert sent["messages"][0]["role"] == "system"
+    assert "resume-checkout" in sent["messages"][0]["content"]
+    # tools in OpenAI function-call shape
+    assert sent["tools"][0]["type"] == "function"
+    assert sent["tools"][0]["function"]["name"] == "search-catalog"
+    # stateless: only client-sent messages after system
+    assert sent["messages"][1] == {"role": "user", "content": "find a red jersey"}
+
+
+def test_turn_translates_tool_calls_roundtrip(client, monkeypatch):
+    def fake_generate(payload):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_abc",
+                                "type": "function",
+                                "function": {
+                                    "name": "add-to-cart",
+                                    "arguments": '{"sku": "NJ-01"}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(app_module, "generate_turn", fake_generate)
+    resp = client.post(
+        "/agent/turn",
+        json={
+            "messages": [{"role": "user", "parts": [{"text": "add a jersey"}]}],
+            "tools": [],
+        },
+    )
+    assert resp.json() == {
+        "parts": [{"functionCall": {"name": "add-to-cart", "args": {"sku": "NJ-01"}}}]
+    }
+
+
+def test_turn_translates_function_response_to_tool_message(client, monkeypatch):
+    captured = {}
+
+    def fake_generate(payload):
+        captured.update(payload)
+        return {"choices": [{"message": {"role": "assistant", "content": "done"}}]}
+
+    monkeypatch.setattr(app_module, "generate_turn", fake_generate)
+    client.post(
+        "/agent/turn",
+        json={
+            "messages": [
+                {"role": "user", "parts": [{"text": "hi"}]},
+                {"role": "model", "parts": [{"functionCall": {"name": "read-cart", "args": {}}}]},
+                {
+                    "role": "user",
+                    "parts": [
+                        {"functionResponse": {"name": "read-cart", "response": {"result": []}}}
+                    ],
+                },
+            ],
+            "tools": [],
+        },
+    )
+    msgs = captured["request_body"]["messages"]
+    assert msgs[1]["role"] == "user"  # system is msgs[0]
+    assert msgs[2]["role"] == "assistant"
+    assert msgs[2]["tool_calls"][0]["function"]["name"] == "read-cart"
+    call_id = msgs[2]["tool_calls"][0]["id"]
+    assert msgs[3]["role"] == "tool"
+    assert msgs[3]["tool_call_id"] == call_id
+    assert json.loads(msgs[3]["content"]) == {"result": []}
 
 
 def test_turn_never_leaks_key(client, monkeypatch):
     def fake_generate(payload):
-        return {"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}
+        return {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
 
     monkeypatch.setattr(app_module, "generate_turn", fake_generate)
     resp = client.post(
         "/agent/turn",
         json={"messages": [{"role": "user", "parts": [{"text": "hi"}]}], "tools": []},
     )
-    body = resp.text
-    assert "gemini_dummy" not in body
-    assert "key=" not in body
+    assert "groq_dummy" not in resp.text
 
 
-def test_turn_gemini_error_maps_to_502(client, monkeypatch):
+def test_turn_groq_error_maps_to_502(client, monkeypatch):
     def boom(payload):
         raise RuntimeError("upstream down")
 
