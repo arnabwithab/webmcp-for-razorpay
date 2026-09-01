@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import agent.app as app_module
+import agent.groq as groq_module
 from agent.app import app
 
 
@@ -20,6 +21,7 @@ def test_turn_proxies_groq_with_system_prompt_and_tools(client, monkeypatch):
         return {"choices": [{"message": {"role": "assistant", "content": "found it"}}]}
 
     monkeypatch.setattr(app_module, "generate_turn", fake_generate)
+    monkeypatch.setattr(groq_module, "generate_turn", fake_generate)
     resp = client.post(
         "/agent/turn",
         json={
@@ -66,6 +68,7 @@ def test_turn_translates_tool_calls_roundtrip(client, monkeypatch):
         }
 
     monkeypatch.setattr(app_module, "generate_turn", fake_generate)
+    monkeypatch.setattr(groq_module, "generate_turn", fake_generate)
     resp = client.post(
         "/agent/turn",
         json={
@@ -86,6 +89,7 @@ def test_turn_translates_function_response_to_tool_message(client, monkeypatch):
         return {"choices": [{"message": {"role": "assistant", "content": "done"}}]}
 
     monkeypatch.setattr(app_module, "generate_turn", fake_generate)
+    monkeypatch.setattr(groq_module, "generate_turn", fake_generate)
     client.post(
         "/agent/turn",
         json={
@@ -117,6 +121,7 @@ def test_turn_never_leaks_key(client, monkeypatch):
         return {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
 
     monkeypatch.setattr(app_module, "generate_turn", fake_generate)
+    monkeypatch.setattr(groq_module, "generate_turn", fake_generate)
     resp = client.post(
         "/agent/turn",
         json={"messages": [{"role": "user", "parts": [{"text": "hi"}]}], "tools": []},
@@ -129,6 +134,7 @@ def test_turn_groq_error_maps_to_502(client, monkeypatch):
         raise RuntimeError("upstream down")
 
     monkeypatch.setattr(app_module, "generate_turn", boom)
+    monkeypatch.setattr(groq_module, "generate_turn", boom)
     resp = client.post("/agent/turn", json={"messages": [], "tools": []})
     assert resp.status_code == 502
 

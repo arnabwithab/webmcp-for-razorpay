@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     store_origin: str = "http://localhost:8000"
     sidecar_origin: str = "http://localhost:9000"
     groq_api_key: str
-    groq_model: str = "openai/gpt-oss-120b"
+    groq_model: str = "openai/gpt-oss-20b"
 
 
 settings = Settings()

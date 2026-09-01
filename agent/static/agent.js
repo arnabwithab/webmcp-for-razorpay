@@ -59,16 +59,18 @@
     return tools;
   }
 
+  function norm(n) { return String(n).replace(/_/g, '-'); }
   async function executeTool(name, args) {
     var ctx = document.modelContext || navigator.modelContext;
     var k = kit();
-    if (k && k.tools.some(function (t) { return t.name === name; })) {
-      var tool = k.tools.find(function (t) { return t.name === name; });
+    name = norm(name);
+    if (k && k.tools.some(function (t) { return norm(t.name) === name; })) {
+      var tool = k.tools.find(function (t) { return norm(t.name) === name; });
       return await tool.execute(args);
     }
     if (ctx && ctx.getTools) {
       var storeTools = await ctx.getTools({ fromOrigins: [STORE_ORIGIN] });
-      var match = storeTools.find(function (t) { return t.name === name; });
+      var match = storeTools.find(function (t) { return norm(t.name) === name; });
       if (match && match.execute) return await match.execute(args);
     }
     throw new Error('tool not found: ' + name);
@@ -106,7 +108,6 @@
       if (fnCall) {
         var call = fnCall.functionCall;
         chip(call.name + '…');
-        addMsg('model', call.name);
         messages.push({ role: 'model', parts: [{ functionCall: call }] });
         var evt = TOOL_EVENT[call.name];
         if (evt && kit()) kit().emit(evt, { tool: call.name });

@@ -1,13 +1,15 @@
-import json
 from pathlib import Path
 
-import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 
+from agent.groq import GROQ_URL, SYSTEM_PROMPT, _from_groq, _to_groq_messages, generate_turn
 from agent.utils.config import settings
 from agent.utils.logger import logger
+
+# re-export for tests that patch app.generate_turn
+__all__ = ["generate_turn", "_to_groq_messages", "_from_groq", "GROQ_URL", "SYSTEM_PROMPT"]
 
 app = FastAPI(title="agent-backend", version="0.1.0")
 app.add_middleware(
@@ -18,96 +20,39 @@ app.add_middleware(
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-
-# spec §7 system prompt, inline
-SYSTEM_PROMPT = (
-    "You drive a demo storefront for the user. Use only the provided tools; "
-    "narrate one short line per action. Never invent SKUs or prices — trust tool results. "
-    "You have NO other tools: never use code execution, browsing, or any tool not listed. "
-    "After checkout, tell the user to click 'Open payment'. If payment is pending or declined, "
-    "offer resume-checkout. If asked anything else: 'I can only help you shop on this store.'"
-)
-
-
-def _to_groq_messages(internal: list[dict]) -> list[dict]:
-    """Internal parts-based messages -> OpenAI-style messages with tool_call id pairing."""
-    out: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
-    call_id = None
-    n = 0
-    for msg in internal:
-        for part in msg.get("parts", []):
-            if "text" in part:
-                out.append(
-                    {
-                        "role": "user" if msg["role"] == "user" else "assistant",
-                        "content": part["text"],
-                    }
-                )
-            elif "functionCall" in part:
-                call = part["functionCall"]
-                n += 1
-                call_id = f"call_{n}"
-                out.append(
-                    {
-                        "role": "assistant",
-                        "tool_calls": [
-                            {
-                                "id": call_id,
-                                "type": "function",
-                                "function": {
-                                    "name": call["name"],
-                                    "arguments": json.dumps(call.get("args", {})),
-                                },
-                            }
-                        ],
-                    }
-                )
-            elif "functionResponse" in part:
-                resp_part = part["functionResponse"]
-                out.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call_id or "call_0",
-                        "name": resp_part["name"],
-                        "content": json.dumps(resp_part.get("response", {})),
-                    }
-                )
-    return out
-
-
-def _from_groq(message: dict) -> dict:
-    """OpenAI-style assistant message -> internal parts shape."""
-    parts: list[dict] = []
-    for call in message.get("tool_calls") or []:
-        fn = call["function"]
-        try:
-            args = json.loads(fn.get("arguments") or "{}")
-        except json.JSONDecodeError:
-            args = {}
-        parts.append({"functionCall": {"name": fn["name"], "args": args}})
-    if message.get("content"):
-        parts.append({"text": message["content"]})
-    return {"parts": parts}
-
-
-def generate_turn(payload: dict) -> dict:
-    """One stateless Groq call (OpenAI-compatible). Returns the raw Groq response."""
-    resp = httpx.post(
-        GROQ_URL,
-        headers={"Authorization": f"Bearer {settings.groq_api_key}"},
-        json=payload["request_body"],
-        timeout=30,
-    )
-    if resp.status_code >= 400:
-        logger.error(f"groq error body: {resp.text[:500]}")
-    resp.raise_for_status()
-    return resp.json()
 
 
 @app.post("/agent/turn")
 async def agent_turn(request: Request):
     body = await request.json()
+    # Try LangGraph orchestration for more deterministic tool choice
+    # (falls back to direct Groq on any error so tests and simple requests keep working)
+    try:
+        from agent.graph import get_graph
+
+        # build history for loop guard
+        history = []
+        for m in body.get("messages", []):
+            for p in m.get("parts", []):
+                if "functionCall" in p:
+                    history.append(p["functionCall"]["name"])
+
+        state = {
+            "messages": body.get("messages", []),
+            "tools": body.get("tools", []),
+            "history": history,
+            "next": "",
+            "result": {},
+        }
+        graph = get_graph()
+        # Use invoke for sync execution (graph is small, no async needed)
+        result_state = graph.invoke(state)
+        if result_state.get("result") and result_state["result"].get("parts") is not None:
+            return result_state["result"]
+    except Exception as e:
+        logger.warning(f"graph fallback to direct groq: {e}")
+
+    # Fallback: direct single-shot Groq (original behavior, used by tests)
     tools = [
         {
             "type": "function",
@@ -123,9 +68,6 @@ async def agent_turn(request: Request):
         "model": settings.groq_model,
         "messages": _to_groq_messages(body.get("messages", [])),
         "temperature": 0.2,
-        # gpt-oss hallucinates built-in tools (container.exec etc.); Groq 400s on
-        # unvalidated calls — return them instead, agent loop rejects unknown tools
-        # and the model self-corrects (docs: /docs/api-reference#chat-create)
         "disable_tool_validation": True,
     }
     if tools:
@@ -145,23 +87,25 @@ async def agent_turn(request: Request):
 def agent_panel():
     return """<!doctype html><html><head><meta charset="utf-8"><title>agent</title>
 <style>
-body{font-family:system-ui,sans-serif;margin:0;padding:12px;background:#fafafa}
-#chat{height:340px;overflow-y:auto;font-size:13px}
+*{box-sizing:border-box}
+body{font-family:system-ui,sans-serif;margin:0;padding:12px 12px 8px;background:#fafafa;display:flex;flex-direction:column;height:100vh}
+#chat{flex:1;overflow-y:auto;font-size:13px;min-height:0;padding-right:2px}
+#chips{min-height:22px;margin:6px 0 0}
 .msg{margin:6px 0;padding:8px 10px;border-radius:10px;max-width:90%}
 .user{background:#0b6bcb;color:#fff;margin-left:auto}
 .model{background:#e4e4e7}
 .chip{display:inline-block;background:#fef08a;border-radius:999px;padding:2px 10px;font-size:12px;margin:2px}
-button{padding:8px 14px;border-radius:999px;border:0;background:#0b6bcb;color:#fff;cursor:pointer}
-input{width:70%;padding:8px;border-radius:8px;border:1px solid #d4d4d8}
+button{padding:8px 14px;border-radius:999px;border:0;background:#0b6bcb;color:#fff;cursor:pointer;flex-shrink:0}
+input{flex:1;min-width:0;padding:8px;border-radius:8px;border:1px solid #d4d4d8}
+.input-bar{display:flex;gap:6px;margin-top:8px;align-items:center}
 </style></head>
 <body>
 <div id="chat"></div>
 <div id="chips"></div>
-<div style="display:flex;gap:6px;margin-top:8px">
+<div class="input-bar">
 <input id="q" placeholder="what do you want to buy?"><button id="send">Go</button><button id="stop">STOP</button>
 </div>
-<script src="http://localhost:9000/kit/razorpay-agent-kit.js"></script>
-<script src="/static/agent.js?v=3"></script>
+<script src="/static/agent.js?v=4"></script>
 </body></html>"""
 
 

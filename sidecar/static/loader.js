@@ -27,7 +27,7 @@
   function inject(src) {
     if (injected(src)) return;
     var s = document.createElement('script');
-    s.src = src + '?v=2';
+    s.src = src + '?v=3';
     s.async = false;
     s.dataset.rzpInject = src;
     // R3 + retry: a failed fetch (sidecar restarting) removes the tag so the

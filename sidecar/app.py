@@ -69,6 +69,9 @@ def post_event(body: EventIn):
         tool=body.tool,
         payload=body.payload,
     )
+    logger.info(
+        f"event {body.event} arm={body.arm} task={body.task_id} session={body.session_id} tool={body.tool}"
+    )
     return {"ts": record["ts"], "task_id": body.task_id, "event": body.event}
 
 

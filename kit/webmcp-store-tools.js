@@ -67,7 +67,7 @@
     {
       name: 'search-catalog',
       description:
-        'Search the store catalog. Navigates the page to the search results so the user sees the filtered grid. Returns matching products (sku, name, url, price).',
+        'Search the store catalog ONCE per user request. Navigates to /search so the user sees the grid. Returns {count, items:[{sku,name,url,price}]} — pick one sku and call show-product next; do not search again with the same query.',
       parameters: {
         type: 'object',
         properties: { query: { type: 'string', description: 'search text' } },
