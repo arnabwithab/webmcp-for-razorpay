@@ -47,11 +47,13 @@
   };
 
   async function getTools() {
+    var tools = [];
     // W3C WebMCP discovery (flag-enabled Chrome or vendored runtime)
     var ctx = document.modelContext || navigator.modelContext;
-    if (!ctx || !ctx.getTools) return [];
-    var tools = await ctx.getTools({ fromOrigins: [STORE_ORIGIN] });
-    // include our own kit money tools
+    if (ctx && ctx.getTools) {
+      tools = await ctx.getTools({ fromOrigins: [STORE_ORIGIN] });
+    }
+    // our own kit money tools (kit loads inside this iframe via the panel)
     var k = kit();
     if (k) tools = tools.concat(k.registered.length ? k.registered : k.tools);
     return tools;

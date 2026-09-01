@@ -68,6 +68,32 @@ def test_cap_rejection_creates_no_link(tmp_path):
     assert links.all() == {}
 
 
+def test_empty_cart_bounded_error_no_link(tmp_path):
+    snap = _write_snapshot(tmp_path)
+    links = LinkStore(tmp_path / "links.json")
+    calls = []
+
+    class FakeRzp:
+        def create_payment_link(self, **kwargs):
+            calls.append(kwargs)
+            return {"id": "plink_x", "short_url": "https://rzp.io/i/x", "status": "created"}
+
+    with pytest.raises(CheckoutError) as err:
+        create_checkout(
+            snapshot_path=snap,
+            links=links,
+            rzp=FakeRzp(),
+            audit_path=tmp_path / "audit.jsonl",
+            max_amount_paise=500000,
+            session_id="s1",
+            arm="agent",
+            task_id="t1",
+            items=[],
+        )
+    assert err.value.code == "empty_cart"
+    assert calls == []  # no Razorpay call for empty cart
+
+
 def test_create_checkout_mints_link_and_logs_event(tmp_path):
     snap = _write_snapshot(tmp_path)
     links = LinkStore(tmp_path / "links.json")

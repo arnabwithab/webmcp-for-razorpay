@@ -68,6 +68,9 @@ def create_checkout(
 
     total = price_items(snapshot_path, items)
 
+    if not items or total <= 0:
+        raise CheckoutError("empty_cart", "cart is empty; add items before checkout")
+
     if total > max_amount_paise:
         raise CheckoutError(
             "cap_exceeded",

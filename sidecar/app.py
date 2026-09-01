@@ -26,13 +26,16 @@ rzp = RazorpayClient()
 app = FastAPI(title="razorpay-sidecar", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.store_origin],
+    # agent origin needed: the agent iframe runs its own kit instance (flag-less
+    # fallback); in the flagged WebMCP demo, tools execute in the store context
+    allow_origins=[settings.store_origin, settings.agent_origin],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.mount(
     "/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static"
 )
+app.mount("/kit", StaticFiles(directory=Path(__file__).resolve().parent.parent / "kit"), name="kit")
 
 
 class EventIn(BaseModel):

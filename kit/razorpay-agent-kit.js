@@ -39,20 +39,19 @@
 
   function readCart() {
     // store-native cart API; kit maps to {sku, qty} — sidecar re-prices from snapshot
-    return fetch(window.__RZP_STORE__ || '/', { credentials: 'include' }).then(function () {
-      return fetch((window.__RZP_STORE__ || '') + '/api/cart', { credentials: 'include' })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          var cart = data && data.data ? data.data : data;
-          var items = (cart && cart.items) || [];
-          return items.map(function (it) {
-            return {
-              sku: String(it.sku || it.product_id || it.id),
-              qty: it.quantity || it.qty || 1,
-            };
-          });
+    var store = window.__RZP_STORE__ || 'http://localhost:8000'; // spec §9 fixed store port
+    return fetch(store + '/api/cart', { credentials: 'include' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var cart = data && data.data ? data.data : data;
+        var items = (cart && cart.items) || [];
+        return items.map(function (it) {
+          return {
+            sku: String(it.sku || it.product_id || it.id),
+            qty: it.quantity || it.qty || 1,
+          };
         });
-    });
+      });
   }
 
   function createCheckout(arm) {

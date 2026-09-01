@@ -13,6 +13,7 @@
   }
   window.__RZP_SIDECAR__ = SIDECAR_ORIGIN;
   window.__RZP_AGENT__ = AGENT_ORIGIN;
+  window.__RZP_STORE__ = window.__RZP_STORE__ || location.origin; // loader runs in the store page
 
   var KIT_URL = SIDECAR_ORIGIN + '/kit/razorpay-agent-kit.js';
   var MANUAL_URL = SIDECAR_ORIGIN + '/kit/manual-arm.js';
