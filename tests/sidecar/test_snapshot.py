@@ -2,11 +2,22 @@ import json
 
 from sidecar.snapshot import build_snapshot
 
-# EverShop /api/products shape: price lives on product or on variants
+# EverShop /api/graphql shape: price.regular.value on product
 PRODUCTS = [
-    {"product_id": 1, "name": "Nike Jersey", "sku": "NJ-01", "price": 10.0, "variants": []},
-    {"product_id": 2, "name": "Sneakers", "sku": "SK-02", "price": None,
-     "variants": [{"sku": "SK-02-M", "price": 50.0}, {"sku": "SK-02-L", "price": 55.0}]},
+    {
+        "product_id": 1,
+        "name": "Nike Jersey",
+        "sku": "NJ-01",
+        "price": {"regular": {"value": 10.0, "currency": "USD"}},
+        "variants": [],
+    },
+    {
+        "product_id": 2,
+        "name": "Sneakers",
+        "sku": "SK-02",
+        "price": None,
+        "variants": [{"sku": "SK-02-M", "price": 50.0}, {"sku": "SK-02-L", "price": 55.0}],
+    },
 ]
 
 

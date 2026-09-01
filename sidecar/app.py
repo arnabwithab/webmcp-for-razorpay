@@ -30,7 +30,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
+app.mount(
+    "/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static"
+)
 
 
 class EventIn(BaseModel):
@@ -90,7 +92,9 @@ def post_checkout_create(body: CheckoutIn):
             items=body.items,
         )
     except CheckoutError as err:
-        raise HTTPException(status_code=422, detail={"code": err.code, "message": str(err), **err.extra})
+        raise HTTPException(
+            status_code=422, detail={"code": err.code, "message": str(err), **err.extra}
+        )
 
 
 @app.post("/checkout/resume")
@@ -144,9 +148,6 @@ def get_compare():
         f"<tr><td>{key}</td><td>{m['discovery_ms']}</td><td>{m['decision_ms']}</td>"
         f"<td>{m['checkout_ms']}</td><td><b>{m['total_ms']}</b></td></tr>"
         for key, m in result["tasks"].items()
-    )
-    median_cells = "".join(
-        f"<td>{(m or {}).get('total_ms', '-')}</td>" for m in result["medians"].values()
     )
     return f"""<!doctype html><html><head><title>/compare</title>
 <style>body{{font-family:monospace;margin:2rem}}table{{border-collapse:collapse}}

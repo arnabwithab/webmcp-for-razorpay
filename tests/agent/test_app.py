@@ -1,5 +1,3 @@
-import json
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -24,7 +22,9 @@ def test_turn_proxies_gemini_with_system_prompt_and_tools(client, monkeypatch):
         "/agent/turn",
         json={
             "messages": [{"role": "user", "parts": [{"text": "find a red jersey"}]}],
-            "tools": [{"name": "search-catalog", "description": "d", "parameters": {"type": "object"}}],
+            "tools": [
+                {"name": "search-catalog", "description": "d", "parameters": {"type": "object"}}
+            ],
         },
     )
     assert resp.status_code == 200

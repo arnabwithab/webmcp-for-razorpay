@@ -1,7 +1,6 @@
 """Catalog snapshot: canonical pricing, INR relabel at fixed rate (spec §6)."""
 
 import json
-import time
 from pathlib import Path
 
 import httpx
@@ -18,7 +17,7 @@ SNAPSHOT_PATH = Path(__file__).resolve().parent / "snapshot.json"
 def build_snapshot(products: list[dict], usd_to_inr: float = USD_TO_INR) -> list[dict]:
     items = []
     for product in products:
-        price_usd = product.get("price")
+        price_usd = (product.get("price") or {}).get("regular", {}).get("value")
         if price_usd is None:
             variant_prices = [v["price"] for v in product.get("variants", []) if v.get("price")]
             if not variant_prices:
@@ -38,14 +37,26 @@ def build_snapshot(products: list[dict], usd_to_inr: float = USD_TO_INR) -> list
 
 
 def fetch_catalog(base_url: str) -> list[dict]:
-    """Fetch seeded catalog from the store's public API (paginated)."""
+    """Fetch seeded catalog from the store's public GraphQL API (paginated)."""
+    query = """
+    query ($page: Int) {
+      products (page: $page) {
+        items { productId name sku price { regular { value currency } } }
+        total
+      }
+    }
+    """
     products, page = [], 1
     while True:
-        resp = httpx.get(f"{base_url}/api/products", params={"page": page, "limit": 100}, timeout=15)
+        resp = httpx.post(
+            f"{base_url}/api/graphql",
+            json={"query": query, "variables": {"page": page}},
+            timeout=15,
+        )
         resp.raise_for_status()
-        batch = resp.json().get("data", {}).get("items", [])
-        products.extend(batch)
-        if len(batch) < 100:
+        data = resp.json()["data"]["products"]
+        products.extend(data["items"])
+        if len(products) >= data["total"] or not data["items"]:
             return products
         page += 1
 

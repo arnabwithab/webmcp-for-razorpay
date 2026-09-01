@@ -43,9 +43,11 @@ def compare_arms(lines: list[dict]) -> dict:
 
     medians = {
         arm: {
-            name: median(m[name] for m in task_list if m[name] is not None)
-            if any(m[name] is not None for m in task_list)
-            else None
+            name: (
+                median(m[name] for m in task_list if m[name] is not None)
+                if any(m[name] is not None for m in task_list)
+                else None
+            )
             for name in METRIC_PAIRS
         }
         for arm, task_list in per_arm.items()

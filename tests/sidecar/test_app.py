@@ -1,4 +1,3 @@
-import base64
 import hashlib
 import hmac as hmac_mod
 import json
@@ -11,10 +10,20 @@ from sidecar.app import app
 from sidecar.core.checkout import LinkStore
 
 SNAPSHOT = [
-    {"sku": "NJ-01", "name": "Nike Jersey", "priceSource": {"value": 10.0, "currency": "USD"},
-     "pricePaise": 83000, "priceInrLabel": "₹830.00"},
-    {"sku": "SK-02", "name": "Sneakers", "priceSource": {"value": 50.0, "currency": "USD"},
-     "pricePaise": 415000, "priceInrLabel": "₹4,150.00"},
+    {
+        "sku": "NJ-01",
+        "name": "Nike Jersey",
+        "priceSource": {"value": 10.0, "currency": "USD"},
+        "pricePaise": 83000,
+        "priceInrLabel": "₹830.00",
+    },
+    {
+        "sku": "SK-02",
+        "name": "Sneakers",
+        "priceSource": {"value": 50.0, "currency": "USD"},
+        "pricePaise": 415000,
+        "priceInrLabel": "₹4,150.00",
+    },
 ]
 
 SECRET = "whsec_dummy"
@@ -68,8 +77,13 @@ def test_event_server_ts_and_audit(client):
 def test_checkout_create_ignores_client_amount(client):
     resp = client.post(
         "/checkout/create",
-        json={"session_id": "s1", "arm": "agent", "task_id": "t1",
-              "items": [{"sku": "NJ-01", "qty": 1}], "amount_paise": 1},
+        json={
+            "session_id": "s1",
+            "arm": "agent",
+            "task_id": "t1",
+            "items": [{"sku": "NJ-01", "qty": 1}],
+            "amount_paise": 1,
+        },
     )
     assert resp.status_code == 200
     assert resp.json()["amountPaise"] == 83000  # snapshot price, not client-sent
@@ -78,8 +92,12 @@ def test_checkout_create_ignores_client_amount(client):
 def test_checkout_create_cap_rejected_no_link(client):
     resp = client.post(
         "/checkout/create",
-        json={"session_id": "s1", "arm": "agent", "task_id": "t1",
-              "items": [{"sku": "SK-02", "qty": 2}]},  # 830000 > 500000
+        json={
+            "session_id": "s1",
+            "arm": "agent",
+            "task_id": "t1",
+            "items": [{"sku": "SK-02", "qty": 2}],
+        },  # 830000 > 500000
     )
     assert resp.status_code == 422
     assert resp.json()["detail"]["code"] == "cap_exceeded"
@@ -89,8 +107,12 @@ def test_checkout_create_cap_rejected_no_link(client):
 def test_webhook_hmac_valid_marks_paid(client):
     created = client.post(
         "/checkout/create",
-        json={"session_id": "s1", "arm": "agent", "task_id": "t1",
-              "items": [{"sku": "NJ-01", "qty": 1}]},
+        json={
+            "session_id": "s1",
+            "arm": "agent",
+            "task_id": "t1",
+            "items": [{"sku": "NJ-01", "qty": 1}],
+        },
     ).json()
     payload = {
         "event": "payment_link.paid",
@@ -110,7 +132,10 @@ def test_webhook_hmac_valid_marks_paid(client):
 
 
 def test_webhook_forged_signature_rejected(client):
-    payload = {"event": "payment_link.paid", "payload": {"payment_link": {"entity": {"id": "plink_1"}}}}
+    payload = {
+        "event": "payment_link.paid",
+        "payload": {"payment_link": {"entity": {"id": "plink_1"}}},
+    }
     raw = json.dumps(payload).encode()
     sig = hmac_mod.new(b"wrong_secret", raw, hashlib.sha256).hexdigest()
     resp = client.post(
@@ -126,12 +151,19 @@ def test_webhook_forged_signature_rejected(client):
 def test_webhook_and_poll_double_close_collapses(client):
     created = client.post(
         "/checkout/create",
-        json={"session_id": "s1", "arm": "agent", "task_id": "t1",
-              "items": [{"sku": "NJ-01", "qty": 1}]},
+        json={
+            "session_id": "s1",
+            "arm": "agent",
+            "task_id": "t1",
+            "items": [{"sku": "NJ-01", "qty": 1}],
+        },
     ).json()
 
     # webhook closes it
-    payload = {"event": "payment_link.paid", "payload": {"payment_link": {"entity": {"id": created["linkId"]}}}}
+    payload = {
+        "event": "payment_link.paid",
+        "payload": {"payment_link": {"entity": {"id": created["linkId"]}}},
+    }
     raw = json.dumps(payload).encode()
     sig = hmac_mod.new(SECRET.encode(), raw, hashlib.sha256).hexdigest()
     client.post("/webhook", content=raw, headers={"X-Razorpay-Signature": sig})
@@ -148,8 +180,12 @@ def test_webhook_and_poll_double_close_collapses(client):
 def test_resume_pending_vs_expired(client):
     created = client.post(
         "/checkout/create",
-        json={"session_id": "s1", "arm": "agent", "task_id": "t1",
-              "items": [{"sku": "NJ-01", "qty": 1}]},
+        json={
+            "session_id": "s1",
+            "arm": "agent",
+            "task_id": "t1",
+            "items": [{"sku": "NJ-01", "qty": 1}],
+        },
     ).json()
 
     # pending -> same shortUrl

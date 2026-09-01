@@ -30,3 +30,8 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# HTML template strings in route handlers exceed line length by design
+"sidecar/app.py" = ["E501"]
+"agent/app.py" = ["E501"]

@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 
@@ -102,9 +101,6 @@ def test_create_checkout_mints_link_and_logs_event(tmp_path):
     assert stored["items"] == [{"sku": "NJ-01", "qty": 1}]
     assert stored["status"] == "created"
 
-    events = [
-        json.loads(line)
-        for line in (tmp_path / "audit.jsonl").read_text().splitlines()
-    ]
+    events = [json.loads(line) for line in (tmp_path / "audit.jsonl").read_text().splitlines()]
     assert [e["event"] for e in events] == ["checkout_opened"]
     assert events[0]["arm"] == "agent"

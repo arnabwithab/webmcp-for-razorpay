@@ -1,0 +1,152 @@
+[
+  {
+    "sku": "THERMO-005-YEL",
+    "name": "Stainless Steel Thermos - Yellow",
+    "priceSource": {
+      "value": 35,
+      "currency": "USD"
+    },
+    "pricePaise": 290500,
+    "priceInrLabel": "\u20b92,905.00"
+  },
+  {
+    "sku": "THERMO-005-BLK",
+    "name": "Stainless Steel Thermos - Black",
+    "priceSource": {
+      "value": 35,
+      "currency": "USD"
+    },
+    "pricePaise": 290500,
+    "priceInrLabel": "\u20b92,905.00"
+  },
+  {
+    "sku": "THERMO-005-WHT",
+    "name": "Stainless Steel Thermos - White",
+    "priceSource": {
+      "value": 35,
+      "currency": "USD"
+    },
+    "pricePaise": 290500,
+    "priceInrLabel": "\u20b92,905.00"
+  },
+  {
+    "sku": "VASE-004-YEL",
+    "name": "Modern Ceramic Vase - Green",
+    "priceSource": {
+      "value": 25,
+      "currency": "USD"
+    },
+    "pricePaise": 207500,
+    "priceInrLabel": "\u20b92,075.00"
+  },
+  {
+    "sku": "VASE-004-BLK",
+    "name": "Modern Ceramic Vase - Black",
+    "priceSource": {
+      "value": 25,
+      "currency": "USD"
+    },
+    "pricePaise": 207500,
+    "priceInrLabel": "\u20b92,075.00"
+  },
+  {
+    "sku": "VASE-004-WHT",
+    "name": "Modern Ceramic Vase - White",
+    "priceSource": {
+      "value": 25,
+      "currency": "USD"
+    },
+    "pricePaise": 207500,
+    "priceInrLabel": "\u20b92,075.00"
+  },
+  {
+    "sku": "BOWL-003-YEL",
+    "name": "Ceramic Candy Bowl - Yellow",
+    "priceSource": {
+      "value": 18,
+      "currency": "USD"
+    },
+    "pricePaise": 149400,
+    "priceInrLabel": "\u20b91,494.00"
+  },
+  {
+    "sku": "BOWL-003-BLK",
+    "name": "Ceramic Candy Bowl - Black",
+    "priceSource": {
+      "value": 18,
+      "currency": "USD"
+    },
+    "pricePaise": 149400,
+    "priceInrLabel": "\u20b91,494.00"
+  },
+  {
+    "sku": "BOWL-003-WHT",
+    "name": "Ceramic Candy Bowl - White",
+    "priceSource": {
+      "value": 18,
+      "currency": "USD"
+    },
+    "pricePaise": 149400,
+    "priceInrLabel": "\u20b91,494.00"
+  },
+  {
+    "sku": "PEN-002-YEL",
+    "name": "Desk Pen Holder - Yellow",
+    "priceSource": {
+      "value": 12,
+      "currency": "USD"
+    },
+    "pricePaise": 99600,
+    "priceInrLabel": "\u20b9996.00"
+  },
+  {
+    "sku": "PEN-002-BLK",
+    "name": "Desk Pen Holder - Black",
+    "priceSource": {
+      "value": 12,
+      "currency": "USD"
+    },
+    "pricePaise": 99600,
+    "priceInrLabel": "\u20b9996.00"
+  },
+  {
+    "sku": "PEN-002-WHT",
+    "name": "Desk Pen Holder - White",
+    "priceSource": {
+      "value": 12,
+      "currency": "USD"
+    },
+    "pricePaise": 99600,
+    "priceInrLabel": "\u20b9996.00"
+  },
+  {
+    "sku": "CUP-001-YEL",
+    "name": "Ceramic Coffee Cup - Yellow",
+    "priceSource": {
+      "value": 15,
+      "currency": "USD"
+    },
+    "pricePaise": 124500,
+    "priceInrLabel": "\u20b91,245.00"
+  },
+  {
+    "sku": "CUP-001-BLK",
+    "name": "Ceramic Coffee Cup - Black",
+    "priceSource": {
+      "value": 15,
+      "currency": "USD"
+    },
+    "pricePaise": 124500,
+    "priceInrLabel": "\u20b91,245.00"
+  },
+  {
+    "sku": "CUP-001-WHT",
+    "name": "Ceramic Coffee Cup - White",
+    "priceSource": {
+      "value": 15,
+      "currency": "USD"
+    },
+    "pricePaise": 124500,
+    "priceInrLabel": "\u20b91,245.00"
+  }
+]

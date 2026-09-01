@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 
@@ -100,7 +99,12 @@ def test_resume_expired_mints_fresh_link_and_logs_recovered(tmp_path):
     audit = tmp_path / "audit.jsonl"
     snap = tmp_path / "snapshot.json"
     snap.write_text(json.dumps(SNAPSHOT))
-    fresh = {"id": "plink_2", "short_url": "https://rzp.io/i/2", "status": "created", "amount": 83000}
+    fresh = {
+        "id": "plink_2",
+        "short_url": "https://rzp.io/i/2",
+        "status": "created",
+        "amount": 83000,
+    }
 
     class FakeRzp:
         def fetch_payment_link(self, link_id):
