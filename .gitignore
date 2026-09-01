@@ -1,0 +1,22 @@
+# secrets / env
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# generated data (append-only at runtime, never committed)
+audit.jsonl
+sidecar/links.json
+
+# node
+node_modules/
+
+# store clone (recreated via `make setup`; pinned commit in README)
+store/
+
+# OS / editor
+.DS_Store
