@@ -137,11 +137,25 @@
 
   var registered = [];
   function registerTools() {
+    // webmcpify runtime (loaded before kit by the loader) owns registration:
+    // AbortSignal lifecycle, exposedTo, validation, rollback on failure
+    var rt = window.webmcpify;
+    if (rt) {
+      var handle = rt.createToolScope('razorpay-money', TOOL_DEFS, {
+        exposedTo: [window.__RZP_AGENT__ || 'http://localhost:8001'],
+        validate: true,
+      });
+      handle.ready.then(function (ok) {
+        if (ok) registered.length = 0, registered.push.apply(registered, TOOL_DEFS);
+      });
+      return;
+    }
+    // flag-less fallback: direct registration if a raw modelContext exists
     var ctx = getModelContext();
     TOOL_DEFS.forEach(function (tool) {
       var ok = false;
       if (ctx && typeof ctx.addTool === 'function') {
-        try { ctx.addTool(tool); ok = true; } catch (e) { /* retry after webmcpify runtime loads */ }
+        try { ctx.addTool(tool); ok = true; } catch (e) { /* retry after runtime loads */ }
       }
       if (ok) registered.push(tool);
     });

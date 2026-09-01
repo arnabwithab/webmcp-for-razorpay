@@ -1,0 +1,380 @@
+{
+  "webmcpify": 4,
+  "app": {
+    "stack": "evershop-ssr",
+    "typescript": true,
+    "entry": "store/packages/evershop/src",
+    "baseUrl": "http://localhost:8000",
+    "startCommand": "make store",
+    "verificationOrigin": "http://localhost:8000",
+    "secureContext": true,
+    "backendOrigins": [],
+    "corsAllowlist": [],
+    "authFixtures": {}
+  },
+  "pipeline": {
+    "phase": "done",
+    "coverageTarget": "curated",
+    "inventoryPolicy": {
+      "revision": 1,
+      "fingerprint": "sha256:spec-g3-four-store-tools",
+      "gates": {
+        "identity": "exclude auth/login/session/password/MFA/SSO",
+        "tenancy_billing": "exclude signup/registration/payment/billing/subscription (payment tools owned by our kit, not webmcpify)",
+        "credentials": "exclude tools returning credentials/tokens/keys/JWTs/signed URLs/cookies",
+        "irreversible_delete": "only open the app's own confirmation UI"
+      }
+    },
+    "setup": {
+      "runtimeVendored": [
+        "kit/webmcp-runtime.js"
+      ],
+      "toolsRegistered": [
+        "kit/webmcp-store-tools.js"
+      ],
+      "injection": [
+        "sidecar/static/loader.js (runtime -> store-tools -> kit -> manual-arm order)"
+      ],
+      "harnessInstalled": [],
+      "originTrialNoted": [
+        "README.md"
+      ]
+    },
+    "discovery": null,
+    "baselineSha": "e313556",
+    "baselineDirty": [],
+    "commitPolicy": "no-commit",
+    "commitWebmcpifyDir": true,
+    "blockers": [
+      "verification uses playwright chromium + stubbed document.modelContext (flag-on Chrome is runbook step 0, human on camera)"
+    ]
+  },
+  "areas": [
+    {
+      "id": "catalog-search",
+      "paths": [
+        "store/packages/evershop/src/components/frontStore/catalog/SearchBox.tsx",
+        "store/packages/evershop/src/modules/catalog/pages/frontStore/catalogSearch/"
+      ],
+      "routes": [
+        "/search?keyword=",
+        "/*(category pages)"
+      ],
+      "status": "inventoried",
+      "policyFingerprint": "sha256:spec-g3-four-store-tools",
+      "exclusions": []
+    },
+    {
+      "id": "product-detail",
+      "paths": [
+        "store/packages/evershop/src/components/frontStore/catalog/ProductSingleForm.tsx",
+        "store/packages/evershop/src/components/frontStore/cart/AddToCart.tsx",
+        "store/packages/evershop/src/modules/catalog/pages/frontStore/productView/"
+      ],
+      "routes": [
+        "/:category/:product_url_key"
+      ],
+      "status": "inventoried",
+      "policyFingerprint": "sha256:spec-g3-four-store-tools",
+      "exclusions": []
+    },
+    {
+      "id": "cart",
+      "paths": [
+        "store/packages/evershop/src/components/frontStore/cart/CartContext.tsx",
+        "store/packages/evershop/src/modules/checkout/graphql/types/Cart/"
+      ],
+      "routes": [
+        "/cart"
+      ],
+      "status": "inventoried",
+      "policyFingerprint": "sha256:spec-g3-four-store-tools",
+      "exclusions": []
+    }
+  ],
+  "routeCoverage": [
+    {
+      "route": "/search?keyword=",
+      "area": "catalog-search",
+      "auth": [
+        "none"
+      ],
+      "interactions": [
+        {
+          "element": "search box + Enter (SearchBox.tsx:216-235)",
+          "source": "store/packages/evershop/src/components/frontStore/catalog/SearchBox.tsx:216",
+          "tool": "search_catalog",
+          "reason": null
+        },
+        {
+          "element": "autocomplete item click (SearchBox.tsx:216)",
+          "source": "store/packages/evershop/src/components/frontStore/catalog/SearchBox.tsx:216",
+          "tool": null,
+          "reason": "subsumed by search_catalog navigation to same results page"
+        }
+      ]
+    },
+    {
+      "route": "/:category/:product_url_key",
+      "area": "product-detail",
+      "auth": [
+        "none"
+      ],
+      "interactions": [
+        {
+          "element": "product card click (listing pages)",
+          "source": "store/packages/evershop/src/components/frontStore/catalog/ProductList.tsx",
+          "tool": "show_product",
+          "reason": null
+        },
+        {
+          "element": "qty NumberField + Add to cart button (ProductSingleForm.tsx:96-133)",
+          "source": "store/packages/evershop/src/components/frontStore/catalog/ProductSingleForm.tsx:96",
+          "tool": "add_to_cart",
+          "reason": null
+        },
+        {
+          "element": "wishlist/compare controls if present",
+          "source": "store/packages/evershop/src/components/frontStore/catalog/ProductSingleForm.tsx",
+          "tool": null,
+          "reason": "not in spec G3 four-tool set; curated coverage"
+        }
+      ]
+    },
+    {
+      "route": "/cart",
+      "area": "cart",
+      "auth": [
+        "none"
+      ],
+      "interactions": [
+        {
+          "element": "cart state read (CartContext.tsx:509 myCart query)",
+          "source": "store/packages/evershop/src/components/frontStore/cart/CartContext.tsx:509",
+          "tool": "read_cart",
+          "reason": null
+        },
+        {
+          "element": "remove item / qty update controls",
+          "source": "store/packages/evershop/src/components/frontStore/cart/CartContext.tsx:646",
+          "tool": null,
+          "reason": "not in spec G3 set; mutating surface kept minimal for demo"
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "id": "search_catalog",
+      "area": "catalog-search",
+      "kind": "imperative",
+      "mutating": false,
+      "priority": 1,
+      "description": "Search the store catalog and navigate to the results page so the user sees the filtered grid.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "search text, e.g. 'kurti' or 'red kurti'"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "untrustedContentHint": false
+      },
+      "source": [
+        "store/packages/evershop/src/components/frontStore/catalog/SearchBox.tsx:216"
+      ],
+      "route": "/search?keyword=test",
+      "auth": [
+        "none"
+      ],
+      "examples": {
+        "valid": {
+          "query": "kurti"
+        },
+        "invalid": {
+          "query": ""
+        }
+      },
+      "expect": {
+        "result": "kurti",
+        "navigation": "/search?keyword=kurti",
+        "ui": "search results grid rendered"
+      },
+      "cleanup": null,
+      "status": "verified",
+      "approval": null,
+      "contractRevision": 1,
+      "failure": null,
+      "attempts": 0,
+      "batchCommit": null,
+      "notes": "uses the store's own /api/graphql keyword filter (same endpoint+filters the UI autocomplete uses), then navigates"
+    },
+    {
+      "id": "show_product",
+      "area": "product-detail",
+      "kind": "imperative",
+      "mutating": false,
+      "priority": 1,
+      "description": "Open a product's page by SKU so the user sees it (navigates to the product URL).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "description": "product SKU, e.g. FASH-W03"
+          }
+        },
+        "required": [
+          "sku"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "untrustedContentHint": false
+      },
+      "source": [
+        "store/packages/evershop/src/components/frontStore/catalog/ProductList.tsx"
+      ],
+      "route": "/women/floral-print-midi-dress",
+      "auth": [
+        "none"
+      ],
+      "examples": {
+        "valid": {
+          "sku": "FASH-W03"
+        },
+        "invalid": {
+          "sku": "NOPE-404"
+        }
+      },
+      "expect": {
+        "result": "sku",
+        "navigation": "product url",
+        "ui": "product page with price rendered"
+      },
+      "cleanup": null,
+      "status": "verified",
+      "approval": null,
+      "contractRevision": 1,
+      "failure": null,
+      "attempts": 0,
+      "batchCommit": null,
+      "notes": "resolves sku->url via the same GraphQL keyword filter, then navigates"
+    },
+    {
+      "id": "add_to_cart",
+      "area": "product-detail",
+      "kind": "imperative",
+      "mutating": "server",
+      "priority": 1,
+      "description": "Add the currently viewed product to the cart by clicking the store's own Add to cart button (visible UI action).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "qty": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+          }
+        },
+        "required": [
+          "sku"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "untrustedContentHint": false
+      },
+      "source": [
+        "store/packages/evershop/src/components/frontStore/catalog/ProductSingleForm.tsx:96",
+        "store/packages/evershop/src/components/frontStore/cart/AddToCart.tsx:56"
+      ],
+      "route": "/women/floral-print-midi-dress",
+      "auth": [
+        "none"
+      ],
+      "examples": {
+        "valid": {
+          "sku": "FASH-W03",
+          "qty": 1
+        },
+        "invalid": {
+          "sku": "FASH-K01"
+        }
+      },
+      "expect": {
+        "result": "cartCount",
+        "navigation": null,
+        "ui": "cart count badge increases"
+      },
+      "cleanup": "remove the added cart item via the cart page's own remove control (test data only)",
+      "status": "verified",
+      "approval": {
+        "note": "spec G3 pre-approves add-to-cart as a demo store-native tool (cart only, no purchase); approved by user",
+        "at": "2026-09-01",
+        "productionSideEffect": null
+      },
+      "contractRevision": 1,
+      "failure": null,
+      "attempts": 0,
+      "batchCommit": null,
+      "notes": "requires being on the product page (agent uses show_product first); invalid example = sku of a DIFFERENT product (must fail without adding)"
+    },
+    {
+      "id": "read_cart",
+      "area": "cart",
+      "kind": "imperative",
+      "mutating": false,
+      "priority": 1,
+      "description": "Read the current cart: items with sku/name/qty/price and totals.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "untrustedContentHint": false
+      },
+      "source": [
+        "store/packages/evershop/src/components/frontStore/cart/CartContext.tsx:509"
+      ],
+      "route": "/cart",
+      "auth": [
+        "none"
+      ],
+      "examples": {
+        "valid": {},
+        "invalid": null
+      },
+      "expect": {
+        "result": "totalQty",
+        "navigation": null,
+        "ui": "cart page shows same items"
+      },
+      "cleanup": null,
+      "status": "verified",
+      "approval": null,
+      "contractRevision": 1,
+      "failure": null,
+      "attempts": 0,
+      "batchCommit": null,
+      "notes": "same-origin myCart GraphQL (the query the cart UI itself uses)"
+    }
+  ],
+  "log": [
+    "2026-09-01 detect: evershop ssr on :8000, secureContext (loopback), baseline e313556",
+    "2026-09-01 inventory: 3 areas curated per spec G3 (search-catalog, show-product, add-to-cart, read-cart); payment excluded by webmcpify policy (kit owns money tools)",
+    "2026-09-01 verify: 4 store tools verified via playwright stub (flag-on Chrome human check pending per runbook step 0)"
+  ]
+}

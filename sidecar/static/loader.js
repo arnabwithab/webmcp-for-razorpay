@@ -15,6 +15,8 @@
   window.__RZP_AGENT__ = AGENT_ORIGIN;
   window.__RZP_STORE__ = window.__RZP_STORE__ || location.origin; // loader runs in the store page
 
+  var RUNTIME_URL = SIDECAR_ORIGIN + '/kit/webmcp-runtime.js';
+  var STORE_TOOLS_URL = SIDECAR_ORIGIN + '/kit/webmcp-store-tools.js';
   var KIT_URL = SIDECAR_ORIGIN + '/kit/razorpay-agent-kit.js';
   var MANUAL_URL = SIDECAR_ORIGIN + '/kit/manual-arm.js';
 
@@ -25,9 +27,12 @@
   function inject(src) {
     if (injected(src)) return;
     var s = document.createElement('script');
-    s.src = src;
+    s.src = src + '?v=2';
     s.async = false;
     s.dataset.rzpInject = src;
+    // R3 + retry: a failed fetch (sidecar restarting) removes the tag so the
+    // MutationObserver's next boot() re-injects it
+    s.onerror = function () { s.remove(); };
     document.head.appendChild(s);
   }
 
@@ -44,6 +49,8 @@
   }
 
   function boot() {
+    inject(RUNTIME_URL);
+    inject(STORE_TOOLS_URL);
     inject(KIT_URL);
     inject(MANUAL_URL);
     injectAgentIframe();

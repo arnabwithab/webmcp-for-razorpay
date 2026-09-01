@@ -50,7 +50,8 @@ Store is [EverShop](https://github.com/evershopcommerce/evershop) v2.2.1 (commit
 | 1 | `store/config/local.json` (port/currency/session config) | config only |
 | 2 | `store/media/fashion/` (25 local product images) | data only |
 | 3 | `store/extensions/session-shim/` — 6-line extension, upstream bug workaround (`/images` route crashes customer auth middleware; still broken upstream) | +6 (sanctioned extension hook, zero EverShop source touched) |
-| 4 | Kit `<script>` tag + checkout hookup | ≤2 (pending UI integration) |
+| 4 | `store/.../Server.tsx` — 1 script tag `loader.js` on every frontStore page | 1 line (spec §4 budget line 1) |
+| 5 | `kit/webmcp-runtime.js` (vendored, MIT) + `kit/webmcp-store-tools.js` (4 store tools via `createToolScope`) — injected by loader | own line-item (spec §4 webmcpify count) |
 
 ## Repo layout
 

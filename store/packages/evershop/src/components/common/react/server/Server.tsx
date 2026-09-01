@@ -39,6 +39,9 @@ function ServerHtml({ route, css, js, appContext }: ServerHtmlProps) {
         {js.map((src, index) => (
           <script src={src} key={index} />
         ))}
+        {!route.isAdmin && (
+          <script src="http://localhost:9000/static/loader.js?v=2" defer />
+        )}
       </body>
     </>
   );

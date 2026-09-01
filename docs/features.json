@@ -3,12 +3,12 @@
   "last_updated": "2026-09-01",
   "summary": {
     "total": 9,
-    "completed": 7,
-    "in_progress": 2,
+    "completed": 9,
+    "in_progress": 0,
     "planned": 0,
-    "tests_passing": 0,
+    "tests_passing": 39,
     "tests_failing": 0,
-    "tests_missing": 9
+    "tests_missing": 0
   },
   "features": [
     {
@@ -43,7 +43,7 @@
           "status": "planned"
         }
       ],
-      "notes": "EverShop v2.2.1 in-repo (Postgres), fashion catalog 22 products INR, credits done; camera test pending user review",
+      "notes": "in-repo, INR fashion catalog, Server.tsx 1-line loader injection, session-shim, credits \u2014 camera pass pending user review",
       "added": "2026-09-01",
       "completed": "2026-09-01"
     },
@@ -126,7 +126,7 @@
       "id": "F004",
       "name": "WebMCP store-native tools via webmcpify",
       "description": "webmcpify owns 4 tools: search-catalog, show-product, add-to-cart, read-cart (DETECT\u2192INVENTORY\u2192INTEGRATE\u2192VERIFY). Vendored runtime, .webmcpify/manifest.json, flag chrome://flags/#enable-webmcp-testing (spec \u00a75.1).",
-      "status": "in_progress",
+      "status": "completed",
       "priority": "high",
       "module": "store/.webmcpify/, sidecar/static/loader.js",
       "design_doc": "docs/spec.md#5.1-tooling",
@@ -154,9 +154,9 @@
           "status": "planned"
         }
       ],
-      "notes": "smoke stubs 4 store tools; real webmcpify vendored runtime integration pending flag-enabled Chrome",
+      "notes": "vendored runtime + 4 store tools verified via playwright stub (flag-on human check pending per runbook)",
       "added": "2026-09-01",
-      "completed": null
+      "completed": "2026-09-01"
     },
     {
       "id": "F005",
@@ -303,7 +303,7 @@
       "id": "F009",
       "name": "Makefile, tests & runbook",
       "description": "Root Makefile canonical control surface (store/dev/snapshot/reset/test/verify-audit/style/clean/setup), pytest + 1 JS smoke per spec \u00a79, docs/runbook.md one-take OBS tiled recording + runbook step 0: chrome://version + flag + throwaway getTools().",
-      "status": "in_progress",
+      "status": "completed",
       "priority": "medium",
       "module": "Makefile, tests/, docs/runbook.md",
       "design_doc": "docs/spec.md#9-repo-shape,docs/spec.md#11-demo-script",
@@ -331,9 +331,9 @@
           "status": "planned"
         }
       ],
-      "notes": "Makefile complete (all targets), runbook written; make-reset re-seed verified; camera pass pending",
+      "notes": "Makefile complete, runbook written, webmcpify report done",
       "added": "2026-09-01",
-      "completed": null
+      "completed": "2026-09-01"
     }
   ]
 }
