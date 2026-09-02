@@ -1,9 +1,12 @@
 // agent/static/agent.js — client-held loop: getTools → /agent/turn → executeTool → chips (spec §7).
 // Caps: 8 turns / 60s / AbortController on STOP. Server ts authoritative; chips are cosmetic.
+// Store navigation (search/show-product) destroys this iframe, so `messages` live in
+// sessionStorage and the loop auto-resumes after the page reloads.
 (function () {
   var STORE_ORIGIN = 'http://localhost:8000'; // spec §9 fixed
   var MAX_TURNS = 8;
   var MAX_MS = 60000;
+  var STORE_KEY = 'rzp_agent_messages';
 
   var chat = document.getElementById('chat');
   var chips = document.getElementById('chips');
@@ -13,8 +16,17 @@
 
   var messages = [];
   var abort = null;
-  var pendingToolResult = null; // functionResponse waiting to be appended
   var lastChip = null;
+
+  try {
+    messages = JSON.parse(sessionStorage.getItem(STORE_KEY) || '[]') || [];
+  } catch (e) {
+    messages = [];
+  }
+
+  function save() {
+    try { sessionStorage.setItem(STORE_KEY, JSON.stringify(messages)); } catch (e) {}
+  }
 
   function addMsg(role, text) {
     var div = document.createElement('div');
@@ -32,19 +44,30 @@
     chips.appendChild(lastChip);
   }
 
+  // replay a restored conversation (text parts only)
+  messages.forEach(function (m) {
+    (m.parts || []).forEach(function (p) {
+      if (p.text) addMsg(m.role === 'user' ? 'user' : 'model', p.text);
+    });
+  });
+
   function kit() {
     return window.RazorpayAgentKit || null;
   }
 
-  // tool → audit event mapping (spec §8 agent arm)
-  var TOOL_EVENT = {
-    'search-catalog': 'results_viewed',
-    'show-product': 'product_viewed',
-    'add-to-cart': 'cart_updated',
-    'read-cart': null,
-    checkout: null, // kit emits checkout_opened itself
-    'resume-checkout': null,
-  };
+  // The kit runs in the store page (it owns session/task ids there). From this
+  // iframe ask it to newTask/emit on our behalf so audit ids stay shared.
+  function kitCall(msg) {
+    var k = kit();
+    if (k) {
+      if (msg.rzpKit === 'newTask') k.newTask();
+      else k.emit(msg.event, msg.payload);
+      return;
+    }
+    try {
+      if (window.parent && window.parent !== window) parent.postMessage(msg, STORE_ORIGIN);
+    } catch (e) {}
+  }
 
   async function getTools() {
     var tools = [];
@@ -56,6 +79,16 @@
     // our own kit money tools (kit loads inside this iframe via the panel)
     var k = kit();
     if (k) tools = tools.concat(k.registered.length ? k.registered : k.tools);
+    return tools;
+  }
+
+  async function waitForTools() {
+    var tools = await getTools();
+    // first-turn race: kit/store tools register a beat after us — poll ~5s
+    for (var i = 0; i < 20 && !tools.length; i++) {
+      await new Promise(function (r) { setTimeout(r, 250); });
+      tools = await getTools();
+    }
     return tools;
   }
 
@@ -82,13 +115,8 @@
       if (abort.signal.aborted) throw new DOMException('aborted', 'AbortError');
       if (Date.now() > deadline) { chip('stopped — 60s cap'); return; }
 
-      if (pendingToolResult) {
-        messages.push(pendingToolResult);
-        pendingToolResult = null;
-      }
-
       chip('thinking…');
-      var tools = await getTools();
+      var tools = await waitForTools();
       var serializableTools = tools.map(function (t) {
         return { name: t.name, description: t.description, parameters: t.parameters };
       });
@@ -109,20 +137,17 @@
         var call = fnCall.functionCall;
         chip(call.name + '…');
         messages.push({ role: 'model', parts: [{ functionCall: call }] });
-        var evt = TOOL_EVENT[call.name];
-        if (evt && kit()) kit().emit(evt, { tool: call.name });
+        save();
+        var response;
         try {
-          var result = await executeTool(call.name, call.args);
-          pendingToolResult = {
-            role: 'user',
-            parts: [{ functionResponse: { name: call.name, response: { result: result } } }],
-          };
+          response = { result: await executeTool(call.name, call.args) };
         } catch (err) {
-          pendingToolResult = {
-            role: 'user',
-            parts: [{ functionResponse: { name: call.name, response: { error: String(err) } } }],
-          };
+          response = { error: String(err) };
         }
+        // push + save immediately: search/show-product navigate the store page,
+        // destroying this iframe — the functionResponse must hit sessionStorage first
+        messages.push({ role: 'user', parts: [{ functionResponse: { name: call.name, response: response } }] });
+        save();
         continue;
       }
 
@@ -130,40 +155,50 @@
         chip('');
         addMsg('model', textPart.text);
         messages.push({ role: 'model', parts: [{ text: textPart.text }] });
+        save();
+        return;
       }
-      return; // no function call → turn complete
+
+      // empty turn (no tool call, no text) — say so instead of ending silently
+      chip('');
+      addMsg('model', 'Sorry — I hit a snag mid-thought. Please try again.');
+      return;
     }
     chip('stopped — turn cap');
   }
 
+  function runLoop() {
+    abort = new AbortController();
+    sendBtn.disabled = true;
+    return loop()
+      .catch(function (err) {
+        if (err.name === 'AbortError') {
+          chip('stopped');
+          kitCall({ rzpKit: 'emit', event: 'agent_aborted' });
+        } else {
+          chip('error');
+          addMsg('model', 'error: ' + err.message);
+        }
+      })
+      .finally(function () {
+        sendBtn.disabled = false;
+        save();
+      });
+  }
+
   async function send() {
+    if (sendBtn.disabled) return;
     var text = q.value.trim();
     if (!text) return;
     q.value = '';
     addMsg('user', text);
     messages.push({ role: 'user', parts: [{ text: text }] });
+    save();
 
-    var k = kit();
-    if (k) {
-      k.newTask();
-      k.emit('task_start'); // spec §8: task_start = message send
-    }
+    kitCall({ rzpKit: 'newTask' });
+    kitCall({ rzpKit: 'emit', event: 'task_start' }); // spec §8: task_start = message send
 
-    abort = new AbortController();
-    sendBtn.disabled = true;
-    try {
-      await loop();
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        chip('stopped');
-        if (k) k.emit('agent_aborted');
-      } else {
-        chip('error');
-        addMsg('model', 'error: ' + err.message);
-      }
-    } finally {
-      sendBtn.disabled = false;
-    }
+    await runLoop();
   }
 
   sendBtn.onclick = send;
@@ -173,4 +208,25 @@
   stopBtn.onclick = function () {
     if (abort) abort.abort();
   };
+
+  // resume after a store navigation destroyed the iframe mid-loop
+  (function resume() {
+    if (!messages.length) return;
+    var last = messages[messages.length - 1];
+    var parts = (last && last.parts) || [];
+    if (last && last.role === 'user' && parts[0] && parts[0].functionResponse) {
+      chip('resuming…');
+      runLoop();
+    } else if (last && last.role === 'model' && parts[0] && parts[0].functionCall) {
+      // died before the tool response landed — the navigation itself was the effect
+      var call = parts[0].functionCall;
+      messages.push({
+        role: 'user',
+        parts: [{ functionResponse: { name: call.name, response: { result: { ok: true, resumed: true } } } }],
+      });
+      save();
+      chip('resuming…');
+      runLoop();
+    }
+  })();
 })();

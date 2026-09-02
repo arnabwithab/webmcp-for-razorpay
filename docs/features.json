@@ -1,12 +1,12 @@
 {
   "project": "agent-native-checkout-race",
-  "last_updated": "2026-09-01",
+  "last_updated": "2026-09-02",
   "summary": {
     "total": 9,
     "completed": 9,
     "in_progress": 0,
     "planned": 0,
-    "tests_passing": 39,
+    "tests_passing": 51,
     "tests_failing": 0,
     "tests_missing": 0
   },
@@ -191,7 +191,7 @@
           "status": "planned"
         }
       ],
-      "notes": "kit money tools + loader + manual-arm written; browser E2E pending",
+      "notes": "kit readCart via myCart GraphQL (productSku), CORS credentials fix, pay chip verified in E2E",
       "added": "2026-09-01",
       "completed": "2026-09-01"
     },
@@ -227,7 +227,7 @@
           "status": "planned"
         }
       ],
-      "notes": "Groq gpt-oss-120b OpenAI-compatible proxy (user amended from Gemini), translation tests green; live turn pending",
+      "notes": "LangGraph orchestration (router + single-tool blocks), sessionStorage chat persistence across navigation, gpt-oss-20b; E2E verified with real Razorpay test link",
       "added": "2026-09-01",
       "completed": "2026-09-01"
     },
@@ -264,7 +264,7 @@
           "status": "planned"
         }
       ],
-      "notes": "compare medians + hash-chain verify green",
+      "notes": "compare medians + hash-chain verify green | 2026-09-02 adversarial E2E debug: fixed graph double-edge (parallel fallback), tool_choice removal, add-to-cart routing, follow-up search->show advance, empty-turn guard, readCart GraphQL endpoint, productSku field, sidecar allow_credentials, iframe sessionStorage resume + task_start bridge. Full loop proven in headless chromium: search->show->add->checkout with real test-mode link (plink_*, INR 249900). Tests: 51 pytest + JS smoke green.",
       "added": "2026-09-01",
       "completed": "2026-09-01"
     },

@@ -5,14 +5,21 @@ Each tool gets its own block (exactly one tool in the Groq request), and a
 lightweight router picks the block for a fresh user turn. The browser still
 executes the store tools via WebMCP; this graph only decides *which* tool to
 call next and returns that single tool_call/text to the frontend loop.
+
+Multi-turn note: the frontend sends the FULL message history on every
+/agent/turn (one utterance spans several calls). The router therefore looks at
+the tools called *since the last user text* to advance the flow
+(search-catalog → show-product) instead of re-parsing keywords forever.
 """
 
+import re
 from typing import Any, Dict, List, TypedDict
 
+import httpx
 from langgraph.graph import END, StateGraph
 
+from agent import groq as groq_mod  # attribute access so tests can monkeypatch
 from agent.groq import _from_groq, _to_groq_messages
-from agent.groq import generate_turn as _generate_turn
 from agent.utils.config import settings
 from agent.utils.logger import logger
 
@@ -20,9 +27,26 @@ from agent.utils.logger import logger
 class AgentState(TypedDict):
     messages: List[Dict[str, Any]]  # internal parts-based messages from the frontend
     tools: List[Dict[str, Any]]  # all 6 tool defs from the frontend
-    history: List[str]  # tool names already called with same args (for loop guard)
+    history: List[str]  # tool names called so far (logging)
     next: str  # router decision
     result: Dict[str, Any]  # final {parts: [...]}
+
+
+SEARCH_HINTS = (
+    "find",
+    "search",
+    "show me",
+    "looking for",
+    "bomber",
+    "jacket",
+    "dress",
+    "kurti",
+    "saree",
+    "palazzo",
+    "tee",
+    "shirt",
+    "sunglasses",
+)
 
 
 def _tool_available(tools: List[Dict[str, Any]], name: str) -> bool:
@@ -31,87 +55,93 @@ def _tool_available(tools: List[Dict[str, Any]], name: str) -> bool:
     )
 
 
-def router_node(state: AgentState) -> Dict[str, Any]:
-    """Deterministic router for fresh user queries + simple history guard.
+def _last_user_text(msgs: List[Dict[str, Any]]) -> str:
+    """Last user message with a text part (skips functionResponse-only messages)."""
+    for m in reversed(msgs):
+        if m.get("role") != "user":
+            continue
+        for p in m.get("parts", []):
+            if "text" in p:
+                return p["text"].lower()
+    return ""
 
-    Priority for a fresh user turn:
-      find/search/show/bomber/jacket/dress/kurti/saree → search-catalog
-      add to cart / add → add-to-cart (requires prior show, but we let the tool
-        itself return 'call show-product first' if needed — visible, not a loop)
-      cart / what.*cart → read-cart
-      checkout / pay / buy → checkout
-      resume / pending / expired → resume-checkout
-    If the last turn was a search with same query, force show-product instead
-    of re-searching (loop guard).
+
+def _segment(msgs: List[Dict[str, Any]]):
+    """Tools called since the last user text + whether the last one succeeded.
+
+    Returns (called, last_ok): `called` is a list of tool names in order,
+    `last_ok` is True/False from the last functionResponse (None if none yet).
+    """
+    called: List[str] = []
+    last_ok = None
+    for m in msgs:
+        if m.get("role") == "user" and any("text" in p for p in m.get("parts", [])):
+            called, last_ok = [], None  # fresh user utterance restarts the segment
+            continue
+        for p in m.get("parts", []):
+            if "functionCall" in p:
+                called.append(p["functionCall"]["name"].replace("_", "-"))
+            elif "functionResponse" in p:
+                resp = p["functionResponse"].get("response") or {}
+                result = resp.get("result") if isinstance(resp.get("result"), dict) else {}
+                last_ok = "error" not in resp and result.get("ok") is not False
+    return called, last_ok
+
+
+def router_node(state: AgentState) -> Dict[str, Any]:
+    """Deterministic routing for demo intents + follow-up turns.
+
+    Fresh user text:  find/show X → search-catalog; add X (to cart) → add-to-cart;
+    what's in my cart → read-cart; checkout/pay → checkout; resume → resume-checkout;
+    anything else → fallback text.
+    Follow-up (tool already ran this utterance): advance search-catalog → show-product;
+    after show-product / add-to-cart / checkout succeeded, stop with a text summary —
+    never auto-chain into cart/checkout.
     """
     msgs = state["messages"]
     tools = state["tools"]
-    history = state.get("history", [])
 
-    # find last user text
-    last_user = ""
-    for m in reversed(msgs):
-        if m.get("role") == "user":
-            for p in m.get("parts", []):
-                if "text" in p:
-                    last_user = p["text"].lower()
-                    break
-            if last_user:
-                break
-
-    # loop guard: if we just did search-catalog with same query, don't search again
-    # history is list of "tool:arg_hash" — for now just tool names
-    last_tool = history[-1] if history else None
-    if last_tool == "search-catalog" and any(
-        k in last_user for k in ["bomber", "jacket", "dress", "kurti", "saree", "palazzo"]
-    ):
-        # we already searched, next should be show — but router only runs on
-        # fresh user turns; the LLM block itself will decide. For fresh turns,
-        # prefer search only if no search in history for this query.
-        pass
-
-    # fresh query routing
-    text = last_user
-    if any(k in text for k in ["checkout", "pay", "buy now", "place order"]):
-        nxt = "checkout" if _tool_available(tools, "checkout") else "search-catalog"
-    elif any(k in text for k in ["resume", "pending", "expired"]):
-        nxt = "resume-checkout"
-    elif any(k in text for k in ["cart", "what.*in.*cart", "show cart"]):
-        nxt = "read-cart"
-    elif any(
-        k in text
-        for k in [
-            "find",
-            "search",
-            "show",
-            "bomber",
-            "jacket",
-            "dress",
-            "kurti",
-            "saree",
-            "palazzo",
-            "tee",
-            "shirt",
-            "sunglasses",
-        ]
-    ):
-        nxt = "search-catalog"
-    elif len(msgs) == 1:  # first turn, no history
-        nxt = "search-catalog"
+    if not tools:
+        # kit not loaded in the iframe yet — answer as text, a tool call would be a
+        # hallucination (log evidence: tool_use_failed with tools=[])
+        nxt = "fallback"
     else:
-        nxt = "search-catalog"  # default
+        called, last_ok = _segment(msgs)
+        if called:
+            last = called[-1]
+            failed = last_ok is False
+            if last == "search-catalog":
+                nxt = "fallback" if failed else "show-product"
+            elif last == "show-product":
+                # failed open (bad sku): one retry, then stop
+                nxt = "show-product" if failed and called.count("show-product") < 2 else "fallback"
+            elif last == "add-to-cart":
+                # failure is usually 'not on the product page' — open it, then retry
+                nxt = "show-product" if failed else "fallback"
+            else:
+                nxt = "fallback"
+        else:
+            text = _last_user_text(msgs)
+            if any(k in text for k in ("checkout", "pay", "buy now", "place order")):
+                nxt = "checkout"
+            elif any(k in text for k in ("resume", "pending", "expired")):
+                nxt = "resume-checkout"
+            elif re.search(r"\badd\b", text):
+                nxt = "add-to-cart"
+            elif re.search(r"(what|show|view|read)\b.*\b(cart|bag)\b|\bin my cart\b", text):
+                nxt = "read-cart"
+            elif any(k in text for k in SEARCH_HINTS):
+                nxt = "search-catalog"
+            else:
+                nxt = "fallback"
 
-    # if the chosen tool just ran last turn, advance one step (search→show, show→add)
-    if history and history[-1] == nxt:
-        order = ["search-catalog", "show-product", "add-to-cart", "read-cart", "checkout"]
-        try:
-            idx = order.index(nxt)
-            if idx + 1 < len(order) and _tool_available(tools, order[idx + 1]):
-                nxt = order[idx + 1]
-        except ValueError:
-            pass
+    if nxt != "fallback" and not _tool_available(tools, nxt):
+        nxt = "fallback"
 
-    logger.info(f"router → {nxt} for query '{last_user[:60]}' history={history}")
+    logger.info(
+        f"router → {nxt} for query '{_last_user_text(msgs)[:60]}' "
+        f"history={state.get('history', [])}"
+    )
     return {"next": nxt}
 
 
@@ -125,7 +155,10 @@ def _single_tool_call(state: AgentState, tool_name: str) -> Dict[str, Any]:
             canonical = t
             break
     if not canonical:
-        return {"result": {"parts": [{"text": f"Tool {tool_name} not available."}]}}
+        return {
+            "result": {"parts": [{"text": f"Tool {tool_name} not available."}]},
+            "history": state.get("history", []),
+        }
 
     groq_tools = [
         {
@@ -137,16 +170,28 @@ def _single_tool_call(state: AgentState, tool_name: str) -> Dict[str, Any]:
             },
         }
     ]
+    nudge = {
+        "role": "system",
+        "content": (
+            f"Call the {canonical['name']} tool now with the right arguments from the "
+            "conversation above. Use the tool results already present; never invent "
+            "SKUs or prices. Use hyphenated tool names exactly as given."
+        ),
+    }
     body = {
         "model": settings.groq_model,
-        "messages": _to_groq_messages(state["messages"]),
+        "messages": _to_groq_messages(state["messages"]) + [nudge],
         "temperature": 0.2,
         "tools": groq_tools,
-        "tool_choice": {"type": "function", "function": {"name": canonical["name"]}},
-        "disable_tool_validation": True,
+        # no tool_choice: gpt-oss-20b on Groq ignores forced choices (logs show it
+        # emitting search-catalog under a forced show-product) — a nudge plus a
+        # single registered tool is the reliable constraint
     }
-    # use the existing generate_turn helper (with retry) but with single-tool body
-    raw = _generate_turn({"request_body": body})
+    try:
+        raw = groq_mod.generate_turn({"request_body": body})
+    except httpx.HTTPStatusError as err:  # tool_use_failed 400 — one clean retry
+        logger.warning(f"single-tool {tool_name} 400, retrying once: {err.response.text[:200]}")
+        raw = groq_mod.generate_turn({"request_body": body})
     msg = raw.get("choices", [{}])[0].get("message", {})
     result = _from_groq(msg)
     # _from_groq returns {parts: [...]}, ensure at least one part
@@ -180,14 +225,22 @@ def resume_node(state: AgentState) -> Dict[str, Any]:
 
 
 def fallback_node(state: AgentState) -> Dict[str, Any]:
-    """No tool matched — let Groq answer with text, no tools."""
+    """No tool next — answer as text. No tools are offered and validation stays on;
+    disable_tool_validation with an empty tool list is what let the model emit
+    hallucinated tool JSON and 400 the whole turn."""
     body = {
         "model": settings.groq_model,
-        "messages": _to_groq_messages(state["messages"]),
+        "messages": _to_groq_messages(state["messages"])
+        + [
+            {
+                "role": "system",
+                "content": "Reply to the user in one short sentence based on the "
+                "conversation above. Do not call any tools.",
+            }
+        ],
         "temperature": 0.2,
-        "disable_tool_validation": True,
     }
-    raw = _generate_turn({"request_body": body})
+    raw = groq_mod.generate_turn({"request_body": body})
     msg = raw.get("choices", [{}])[0].get("message", {})
     result = _from_groq(msg)
     if not result.get("parts"):
@@ -209,6 +262,8 @@ def build_graph():
     g.add_node("fallback", fallback_node)
 
     g.set_entry_point("router")
+    # conditional edges ONLY — an extra unconditional edge made the fallback node
+    # run in parallel with every routed block (duplicate Groq calls + 400s)
     g.add_conditional_edges(
         "router",
         lambda s: s["next"],
@@ -219,6 +274,7 @@ def build_graph():
             "read-cart": "read-cart",
             "checkout": "checkout",
             "resume-checkout": "resume-checkout",
+            "fallback": "fallback",
         },
     )
     for n in [
@@ -231,8 +287,6 @@ def build_graph():
         "fallback",
     ]:
         g.add_edge(n, END)
-    # if router picks an unknown next, fallback
-    g.add_edge("router", "fallback")
     return g.compile()
 
 

@@ -38,18 +38,21 @@
   }
 
   function readCart() {
-    // store-native cart API; kit maps to {sku, qty} — sidecar re-prices from snapshot
-    var store = window.__RZP_STORE__ || 'http://localhost:8000'; // spec §9 fixed store port
-    return fetch(store + '/api/cart', { credentials: 'include' })
+    // EverShop v2 has no /api/cart REST route — the cart lives on GraphQL
+    // (schema field is productSku; plain `sku` does not resolve)
+    return fetch('/api/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        query: '{ myCart { totalQty items { productSku productName qty } } }',
+      }),
+    })
       .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var cart = data && data.data ? data.data : data;
-        var items = (cart && cart.items) || [];
-        return items.map(function (it) {
-          return {
-            sku: String(it.sku || it.product_id || it.id),
-            qty: it.quantity || it.qty || 1,
-          };
+      .then(function (d) {
+        var cart = ((d.data || {}).myCart) || {};
+        return (cart.items || []).map(function (it) {
+          return { sku: String(it.productSku || it.sku || it.productId || ''), qty: it.qty || 1 };
         });
       });
   }
@@ -178,4 +181,14 @@
       return getTaskId();
     },
   };
+
+  // agent panel bridge: the iframe (different origin) can't reach our sessionStorage,
+  // so it asks us to newTask/emit — keeps session/task ids shared for the audit chain
+  window.addEventListener('message', function (e) {
+    if (e.origin !== (window.__RZP_AGENT__ || 'http://localhost:8001')) return;
+    var d = e.data || {};
+    if (!window.RazorpayAgentKit) return;
+    if (d.rzpKit === 'newTask') window.RazorpayAgentKit.newTask();
+    else if (d.rzpKit === 'emit' && d.event) window.RazorpayAgentKit.emit(d.event, d.payload);
+  });
 })();

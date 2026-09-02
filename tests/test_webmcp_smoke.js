@@ -35,6 +35,7 @@ global.document = {
 };
 global.navigator = {};
 global.window = global;
+global.addEventListener = () => {}; // kit's iframe→kit bridge listener is a no-op here
 global.location = { pathname: '/' };
 global.sessionStorage = {
   _m: {},

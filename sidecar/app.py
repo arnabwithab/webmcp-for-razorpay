@@ -31,6 +31,9 @@ app.add_middleware(
     allow_origins=[settings.store_origin, settings.agent_origin],
     allow_methods=["*"],
     allow_headers=["*"],
+    # the kit posts /checkout/create with credentials:'include' — without this the
+    # browser drops the request after a clean preflight ("Failed to fetch")
+    allow_credentials=True,
 )
 app.mount(
     "/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static"

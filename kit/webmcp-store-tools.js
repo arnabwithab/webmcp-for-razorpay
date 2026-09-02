@@ -44,7 +44,7 @@
 
   var CART_Q =
     '{ myCart { uuid totalQty grandTotal { value } ' +
-    'items { sku productName qty } } }';
+    'items { productSku productName qty } } }';
 
   function findProductBySku(sku) {
     return gql('{ categories { items { products { items { name sku url price { regular { value currency } } } } } } }').then(
@@ -204,7 +204,7 @@
             totalQty: cart.totalQty || 0,
             grandTotal: cart.grandTotal ? cart.grandTotal.value : null,
             items: (cart.items || []).map(function (it) {
-              return { sku: it.sku, name: it.productName, qty: it.qty };
+              return { sku: it.productSku || it.sku, name: it.productName, qty: it.qty };
             }),
           };
         });

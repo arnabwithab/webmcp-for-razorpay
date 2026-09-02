@@ -67,7 +67,8 @@ def verify_audit(audit_path: Path) -> tuple[bool, str]:
 
 
 if __name__ == "__main__":
-    audit_path = Path(__file__).resolve().parents[1] / "audit.jsonl"
+    # parents[2]: sidecar/core/audit.py → sidecar/ → project root (same file app.py writes)
+    audit_path = Path(__file__).resolve().parents[2] / "audit.jsonl"
     ok, reason = verify_audit(audit_path)
     print(reason)
     raise SystemExit(0 if ok else 1)

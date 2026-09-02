@@ -139,6 +139,21 @@ def test_turn_groq_error_maps_to_502(client, monkeypatch):
     assert resp.status_code == 502
 
 
+def test_turn_empty_groq_message_returns_visible_text(client, monkeypatch):
+    def fake_generate(payload):
+        return {"choices": [{"message": {"role": "assistant", "content": ""}}]}
+
+    monkeypatch.setattr(app_module, "generate_turn", fake_generate)
+    monkeypatch.setattr(groq_module, "generate_turn", fake_generate)
+    resp = client.post(
+        "/agent/turn",
+        json={"messages": [{"role": "user", "parts": [{"text": "hi"}]}], "tools": []},
+    )
+    assert resp.status_code == 200
+    parts = resp.json()["parts"]
+    assert parts and parts[0]["text"]  # never hand the frontend loop silence
+
+
 def test_agent_panel_served(client):
     resp = client.get("/agent")
     assert resp.status_code == 200

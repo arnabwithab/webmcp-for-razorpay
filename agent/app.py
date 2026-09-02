@@ -80,7 +80,10 @@ async def agent_turn(request: Request):
         raise HTTPException(status_code=502, detail={"code": "model_error"})
 
     message = raw.get("choices", [{}])[0].get("message", {})
-    return _from_groq(message)
+    parts = _from_groq(message).get("parts", [])
+    if not parts:  # empty turn — never hand the loop silence (it would end invisibly)
+        return {"parts": [{"text": "Sorry — I hit a snag mid-thought. Please try again."}]}
+    return {"parts": parts}
 
 
 @app.get("/agent", response_class=HTMLResponse)
@@ -105,7 +108,7 @@ input{flex:1;min-width:0;padding:8px;border-radius:8px;border:1px solid #d4d4d8}
 <div class="input-bar">
 <input id="q" placeholder="what do you want to buy?"><button id="send">Go</button><button id="stop">STOP</button>
 </div>
-<script src="/static/agent.js?v=4"></script>
+<script src="/static/agent.js?v=5"></script>
 </body></html>"""
 
 
