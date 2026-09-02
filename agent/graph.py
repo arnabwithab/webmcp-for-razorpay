@@ -132,9 +132,10 @@ def show_node(state: AgentState) -> Dict[str, Any]:
     if "show-product" in state["ran"]:
         logger.info(f"graph: show skip — already ran args={state['ran']['show-product']}")
         return state
-    sku = _first_sku(_last_search_result(state["messages"]))
+    last = _last_search_result(state["messages"])
+    sku = _first_sku(last)
     if not sku:
-        logger.info("graph: show skip — no search result to open")
+        logger.info(f"graph: show skip — no search result to open last={str(last)[:120]!r}")
         return state
     return _emit_call(state, "show-product", {"sku": sku})
 

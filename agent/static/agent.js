@@ -107,7 +107,20 @@
     if (ctx && ctx.getTools) {
       var storeTools = await ctx.getTools({ fromOrigins: [STORE_ORIGIN] });
       var match = storeTools.find(function (t) { return norm(t.name) === name; });
-      if (match && match.execute) return await match.execute(args);
+      if (match) {
+        // native WebMCP (flagged Chrome) uses ctx.executeTool and expects a JSON string
+        // for input when inputSchema is stringified; headless stub uses match.execute(object)
+        if (ctx.executeTool) {
+          try { return await ctx.executeTool(match, args); }
+          catch (e) {
+            if (String(e).includes('Failed to parse input')) {
+              return await ctx.executeTool(match, JSON.stringify(args));
+            }
+            throw e;
+          }
+        }
+        if (match.execute) return await match.execute(args);
+      }
     }
     throw new Error('tool not found: ' + name);
   }
@@ -128,7 +141,7 @@
         return;
       }
       var serializableTools = tools.map(function (t) {
-        return { name: t.name, description: t.description, parameters: t.parameters };
+        return { name: t.name, description: t.description, parameters: t.parameters || t.inputSchema };
       });
       var resp = await fetch('/agent/turn', {
         method: 'POST',

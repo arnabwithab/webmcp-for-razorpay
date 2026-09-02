@@ -55,7 +55,9 @@ async def agent_turn(request: Request):
 
 @app.get("/agent", response_class=HTMLResponse)
 def agent_panel():
-    return """<!doctype html><html><head><meta charset="utf-8"><title>agent</title>
+    from fastapi.responses import HTMLResponse as _HR
+
+    html = """<!doctype html><html><head><meta charset="utf-8"><title>agent</title>
 <style>
 *{box-sizing:border-box}
 body{font-family:system-ui,sans-serif;margin:0;padding:12px 12px 8px;background:#fafafa;display:flex;flex-direction:column;height:100vh}
@@ -75,13 +77,18 @@ input{flex:1;min-width:0;padding:8px;border-radius:8px;border:1px solid #d4d4d8}
 <div class="input-bar">
 <input id="q" placeholder="what do you want to buy?"><button id="send">Go</button><button id="stop">STOP</button>
 </div>
-<script src="/static/agent.js?v=6"></script>
+<script src="/static/agent.js?v=9"></script>
 </body></html>"""
+    return _HR(content=html, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/static/agent.js")
 def agent_js():
-    return FileResponse(STATIC_DIR / "agent.js", media_type="application/javascript")
+    return FileResponse(
+        STATIC_DIR / "agent.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # spec §5: agent backend serves the loader (file lives in sidecar/static per §9)

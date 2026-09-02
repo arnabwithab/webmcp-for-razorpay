@@ -128,12 +128,14 @@
       name: 'checkout',
       description: 'Create a Razorpay payment link for the current cart. Returns a shortUrl — render an "Open payment →" chip and tell the user to click it.',
       parameters: { type: 'object', properties: {}, required: [] },
+      inputSchema: { type: 'object', properties: {}, required: [] },
       execute: function () { return checkoutTool(); },
     },
     {
       name: 'resume-checkout',
       description: 'Resume a pending or expired payment link. pending → same link; expired → fresh link at snapshot price.',
       parameters: { type: 'object', properties: { linkId: { type: 'string' } }, required: ['linkId'] },
+      inputSchema: { type: 'object', properties: { linkId: { type: 'string' } }, required: ['linkId'] },
       execute: function (args) { return resumeCheckout(args); },
     },
   ];

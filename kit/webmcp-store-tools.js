@@ -73,10 +73,17 @@
         properties: { query: { type: 'string', description: 'search text' } },
         required: ['query'],
       },
+      inputSchema: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+      },
       execute: rt.singleFlight(function (input) {
         var q = String((input && input.query) || '').trim();
         if (!q) return Promise.resolve({ ok: false, error: 'query is required' });
+        console.info('[webmcp] search-catalog query=' + JSON.stringify(q));
         return searchItems(q, 10).then(function (items) {
+          console.info('[webmcp] search-catalog result count=' + items.length);
           var out = items.map(function (p) {
             return {
               sku: p.sku,
@@ -88,6 +95,9 @@
           window.location.href = '/search?keyword=' + encodeURIComponent(q);
           if (kit()) kit().emit('results_viewed', { tool: 'search-catalog', query: q });
           return { ok: true, count: out.length, items: out };
+        }).catch(function (e) {
+          console.error('[webmcp] search-catalog failed', e);
+          return { ok: false, error: String(e && e.message || e) };
         });
       }),
     },
@@ -100,11 +110,18 @@
         properties: { sku: { type: 'string', description: 'product SKU' } },
         required: ['sku'],
       },
+      inputSchema: {
+        type: 'object',
+        properties: { sku: { type: 'string' } },
+        required: ['sku'],
+      },
       execute: rt.singleFlight(function (input) {
         var sku = String((input && input.sku) || '').trim();
         if (!sku) return Promise.resolve({ ok: false, error: 'sku is required' });
+        console.info('[webmcp] show-product sku=' + JSON.stringify(sku));
         return findProductBySku(sku).then(function (p) {
           if (!p) {
+            console.warn('[webmcp] show-product not found sku=' + sku);
             return { ok: false, error: 'no product found for sku ' + sku };
           }
           window.location.href = p.url;
@@ -116,6 +133,9 @@
             url: p.url,
             price: priceText(p.price),
           };
+        }).catch(function (e) {
+          console.error('[webmcp] show-product failed', e);
+          return { ok: false, error: String(e && e.message || e) };
         });
       }),
     },
@@ -124,6 +144,11 @@
       description:
         "Add the currently viewed product to the cart by clicking the store's own Add to cart button. Must be on the product page first (use show-product).",
       parameters: {
+        type: 'object',
+        properties: { sku: { type: 'string' }, qty: { type: 'integer', minimum: 1 } },
+        required: ['sku'],
+      },
+      inputSchema: {
         type: 'object',
         properties: { sku: { type: 'string' }, qty: { type: 'integer', minimum: 1 } },
         required: ['sku'],
@@ -195,6 +220,7 @@
       name: 'read-cart',
       description: 'Read the current cart: items (sku, name, qty) and totals.',
       parameters: { type: 'object', properties: {}, required: [] },
+      inputSchema: { type: 'object', properties: {}, required: [] },
       execute: function () {
         return gql(CART_Q).then(function (d) {
           var cart = (d.data || {}).myCart;
