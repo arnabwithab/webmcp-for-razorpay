@@ -6,7 +6,7 @@
     "completed": 9,
     "in_progress": 0,
     "planned": 0,
-    "tests_passing": 51,
+    "tests_passing": 49,
     "tests_failing": 0,
     "tests_missing": 0
   },
@@ -227,9 +227,9 @@
           "status": "planned"
         }
       ],
-      "notes": "LangGraph orchestration (router + single-tool blocks), sessionStorage chat persistence across navigation, gpt-oss-20b; E2E verified with real Razorpay test link",
+      "notes": "LLM-driven WebMCP checkout loop (spec §5-§7): /agent/turn = one Groq gpt-oss tool-use decision per turn, always carrying the real tool list (disable_tool_validation, no forced tool_choice). Backend guards data/ordering: search-catalog with LLM-extracted keywords, show-product sku injected from result.items[0].sku, add-to-cart corrected to shown sku, checkout hard-end (spec Q2) with resume-checkout recovery (Track 03). agent.js handles stub (execute) + native (executeTool stringified) and serializes inputSchema/parameters. sessionStorage chat persistence across navigation, gpt-oss-20b.",
       "added": "2026-09-01",
-      "completed": "2026-09-01"
+      "completed": "2026-09-02"
     },
     {
       "id": "F007",

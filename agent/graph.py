@@ -1,42 +1,38 @@
-"""LangGraph orchestration v3 — deterministic checkout funnel (no LLM in the loop).
+"""LLM-driven WebMCP checkout loop (spec §5-§7).
 
-    START → user_turn → search-catalog → show-product → add-to-cart → read-cart → checkout → END
+One /agent/turn = one Groq tool-use decision that the browser executes via WebMCP,
+then posts the functionResponse and asks for the next call. The Groq call always
+carries the real tool list (disable_tool_validation, no forced tool_choice) so the
+model never hallucinates an unregistered tool → 400 (HANDOFF §6b).
 
-Each node emits its functionCall at most once per utterance (nodes whose tool already
-ran in the ledger pass through), then HALTS the invoke: the browser executes the call
-via WebMCP and posts /agent/turn again, advancing the funnel one step. After checkout
-the funnel is closed for the utterance (spec Q2 hard end).
-
-No router, no chat node, no Groq calls — every failure observed on 2026-09-02
-(8x search loop, tool_choice:none 400s, "json"-tool hallucinations) lived in the
-LLM decision layer, while the tools themselves proved flawless when driven directly.
+The backend guards the data + ordering a stateless model can't be trusted with:
+  - checkout already ran → spec Q2 hard end: only recovery (resume-checkout) is
+    allowed; anything else collapses to the "Payment link is ready" line.
+  - show-product / add-to-cart need a real search result: their sku is injected
+    from result.items[0].sku (never a hallucinated one); if no search ran yet, a
+    search-catalog call is emitted first (LLM keywords, regex fallback).
+  - search-catalog / read-cart / checkout / resume-checkout pass through.
 """
 
 import json
 import re
-from typing import Any, Dict, List, TypedDict
+from typing import Any, Dict, List
 
-from langgraph.graph import END, StateGraph
-
+from agent.groq import _from_groq, _to_groq_messages, generate_turn
+from agent.utils.config import settings
 from agent.utils.logger import logger
 
-# ponytail: regex filler-strip instead of an LLM call; extend it if the demo script needs more
+# ponytail: regex filler-strip only as a *fallback* when the model jumps to
+# show/add before searching; the primary keyword extraction is the LLM's own.
 _QUERY_FILLER = re.compile(
     r"^(please\s+)?(can\s+you\s+)?(find|show|get|search|look\s*for)(\s+(me|for))?\s+((a|an|the)\s+)?",
     re.IGNORECASE,
 )
 
-
-class AgentState(TypedDict):
-    messages: List[Dict[str, Any]]  # full frontend history (parts-based)
-    tools: List[Dict[str, Any]]  # all tool defs from the frontend
-    ran: Dict[str, str]  # tool -> args-json, executed since the last user text
-    result: Dict[str, Any]  # {parts: [...]} accumulated this invoke
-    pending: bool  # True once a fresh functionCall awaits browser execution
-    done: bool  # checkout already finished this utterance (hard end, spec Q2)
+_PAYMENT_LINE = "Payment link is ready — click Open payment to pay."
 
 
-# ---------------------------------------------------------------- helpers
+# ---------------------------------------------------------------- history helpers
 
 
 def _last_user_text(msgs: List[Dict[str, Any]]) -> str:
@@ -49,40 +45,20 @@ def _last_user_text(msgs: List[Dict[str, Any]]) -> str:
     return ""
 
 
-def _seed_ran(msgs: List[Dict[str, Any]]) -> Dict[str, str]:
-    """Tools already executed since the last user text (name -> args json)."""
-    ran: Dict[str, str] = {}
-    for m in msgs:
-        if m.get("role") == "user" and any("text" in p for p in m.get("parts", [])):
-            ran = {}  # fresh utterance restarts the ledger
-            continue
-        for p in m.get("parts", []):
-            if "functionCall" in p:
-                call = p["functionCall"]
-                ran[call["name"].replace("_", "-")] = json.dumps(
-                    call.get("args", {}), sort_keys=True
-                )
-    return ran
-
-
-def _last_search_result(msgs: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Most recent search-catalog functionResponse payload ({count, items:[...]})."""
+def _latest_response(msgs: List[Dict[str, Any]], name: str) -> Dict[str, Any]:
+    """Latest functionResponse payload ({result}) for a tool, json.loads-ing
+    stringified results (native WebMCP returns the tool result as a string)."""
     for m in reversed(msgs):
-        if m.get("role") != "user":
-            continue
         for p in m.get("parts", []):
-            if "functionResponse" in p and p["functionResponse"].get("name") == "search-catalog":
+            if "functionResponse" in p and p["functionResponse"].get("name") == name:
                 resp = p["functionResponse"].get("response") or {}
                 result = resp.get("result")
-                # native WebMCP stringifies the tool result; headless returns the object directly
                 if isinstance(result, str):
                     try:
                         result = json.loads(result)
                     except json.JSONDecodeError:
                         result = {}
-                if not isinstance(result, dict):
-                    result = {}
-                return result
+                return result if isinstance(result, dict) else {}
     return {}
 
 
@@ -91,115 +67,114 @@ def _first_sku(result: Dict[str, Any]) -> str:
     return str(items[0].get("sku")) if items else ""
 
 
-def _emit_call(state: AgentState, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    state["result"]["parts"].append({"functionCall": {"name": name, "args": args}})
-    state["ran"][name] = json.dumps(args, sort_keys=True)
-    state["pending"] = True
-    logger.info(f"graph: emit {name} args={args}")
-    return state
+def _has_call(msgs: List[Dict[str, Any]], name: str) -> bool:
+    return any(
+        p.get("functionCall", {}).get("name") == name
+        for m in msgs
+        for p in m.get("parts", [])
+        if "functionCall" in p
+    )
 
 
-def _halt(state: AgentState) -> str:
-    return "halt" if state.get("pending") or state.get("done") else "continue"
+# ---------------------------------------------------------------- Groq request build
 
 
-# ---------------------------------------------------------------- nodes
-
-
-def user_turn_node(state: AgentState) -> Dict[str, Any]:
-    utterance = _last_user_text(state["messages"])
-    ran = _seed_ran(state["messages"])
-    logger.info(f"graph: user_turn utterance={utterance[:60]!r} ran={list(ran)}")
-    return {
-        "ran": ran,
-        "result": {"parts": []},
-        "pending": False,
-        "done": "checkout" in ran,  # spec Q2: hard end after checkout
-    }
-
-
-def search_node(state: AgentState) -> Dict[str, Any]:
-    if not state["tools"]:
-        state["result"]["parts"].append(
-            {"text": "Store tools are still loading — try again in a moment."}
+def _tools_to_groq(tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Frontend {name, description, parameters|inputSchema} -> OpenAI tools list."""
+    out = []
+    for t in tools:
+        schema = t.get("parameters") or t.get("inputSchema") or {"type": "object"}
+        if isinstance(schema, str):
+            try:
+                schema = json.loads(schema)
+            except json.JSONDecodeError:
+                schema = {"type": "object"}
+        out.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": t["name"],
+                    "description": t.get("description", ""),
+                    "parameters": schema,
+                },
+            }
         )
-        state["pending"] = True  # halt; nothing else can run this invoke
-        logger.info("graph: search skip — no tools loaded in iframe yet")
-        return state
-    if "search-catalog" in state["ran"]:
-        logger.info(f"graph: search skip — already ran args={state['ran']['search-catalog']}")
-        return state
-    query = _QUERY_FILLER.sub("", _last_user_text(state["messages"])).strip()
-    if not query:
-        logger.info("graph: search skip — no utterance text")
-        return state
-    return _emit_call(state, "search-catalog", {"query": query})
+    return out
 
 
-def show_node(state: AgentState) -> Dict[str, Any]:
-    if "show-product" in state["ran"]:
-        logger.info(f"graph: show skip — already ran args={state['ran']['show-product']}")
-        return state
-    last = _last_search_result(state["messages"])
-    sku = _first_sku(last)
-    if not sku:
-        logger.info(f"graph: show skip — no search result to open last={str(last)[:120]!r}")
-        return state
-    return _emit_call(state, "show-product", {"sku": sku})
+def _call_groq(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One Groq call → the internal parts list for this turn."""
+    body = {
+        "model": settings.groq_model,
+        "messages": _to_groq_messages(messages),
+        "tools": _tools_to_groq(tools),
+        "disable_tool_validation": True,  # no forced tool_choice — that 400s on Groq
+    }
+    logger.info(
+        f"graph: groq msgs={len(body['messages'])} "
+        f"tools={[t['function']['name'] for t in body['tools']]}"
+    )
+    data = generate_turn({"request_body": body})
+    return _from_groq(data["choices"][0]["message"])["parts"]
 
 
-def add_node(state: AgentState) -> Dict[str, Any]:
-    if "add-to-cart" in state["ran"]:
-        return state
-    sku = _first_sku(_last_search_result(state["messages"]))
-    if not sku:
-        return state
-    return _emit_call(state, "add-to-cart", {"sku": sku, "qty": 1})
+# ---------------------------------------------------------------- recovery (Track 03)
 
 
-def read_node(state: AgentState) -> Dict[str, Any]:
-    if "read-cart" in state["ran"] or "add-to-cart" not in state["ran"]:
-        return state
-    return _emit_call(state, "read-cart", {})
+def _maybe_resume(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """After checkout: the funnel is closed (spec Q2). The only action still allowed
+    is recovery — resume-checkout for a pending/declined payment. Anything else
+    (including a duplicate checkout) collapses to the payment line."""
+    parts = _call_groq(messages, tools)
+    call = parts[0].get("functionCall") if parts else None
+    if call and call["name"] == "resume-checkout":
+        logger.info("graph: recovery → resume-checkout")
+        return {
+            "parts": [{"functionCall": {"name": "resume-checkout", "args": call.get("args") or {}}}]
+        }
+    return {"parts": [{"text": _PAYMENT_LINE}]}
 
 
-def checkout_node(state: AgentState) -> Dict[str, Any]:
-    if "checkout" in state["ran"] or "add-to-cart" not in state["ran"]:
-        return state
-    return _emit_call(state, "checkout", {})
+# ---------------------------------------------------------------- main decision
 
 
-# ---------------------------------------------------------------- graph
+def decide_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """One LLM tool-use decision for /agent/turn. Returns {"parts": [...]}."""
+    if not tools:
+        logger.info("graph: no tools loaded in iframe")
+        return {"parts": [{"text": "Store tools are still loading — try again in a moment."}]}
 
+    # Spec Q2 hard end: after a payment tool the funnel is closed. resume-checkout
+    # (recovery) is allowed once; after that, only the payment line.
+    if _has_call(messages, "resume-checkout"):
+        logger.info("graph: recovery completed — hard end")
+        return {"parts": [{"text": _PAYMENT_LINE}]}
+    if _has_call(messages, "checkout"):
+        return _maybe_resume(messages, tools)
 
-def build_graph():
-    g = StateGraph(AgentState)
-    g.add_node("user_turn", user_turn_node)
-    g.add_node("search-catalog", search_node)
-    g.add_node("show-product", show_node)
-    g.add_node("add-to-cart", add_node)
-    g.add_node("read-cart", read_node)
-    g.add_node("checkout", checkout_node)
+    parts = _call_groq(messages, tools)
+    call = parts[0].get("functionCall") if parts else None
+    if not call:
+        return {"parts": parts}  # text-only reply
 
-    g.set_entry_point("user_turn")
-    funnel = [
-        ("user_turn", "search-catalog"),
-        ("search-catalog", "show-product"),
-        ("show-product", "add-to-cart"),
-        ("add-to-cart", "read-cart"),
-        ("read-cart", "checkout"),
-    ]
-    for src, dst in funnel:
-        g.add_conditional_edges(src, _halt, {"halt": END, "continue": dst})
-    g.add_edge("checkout", END)
-    return g.compile()
+    name = call["name"]
+    args = dict(call.get("args") or {})
+    search = _latest_response(messages, "search-catalog")
+    sku = _first_sku(search)
 
+    # Ordering guardrail: show/add need a real search result first.
+    if name in ("show-product", "add-to-cart") and not sku:
+        query = _QUERY_FILLER.sub("", _last_user_text(messages)).strip() or args.get("query") or ""
+        logger.info(f"graph: force search-first for {name}")
+        return {"parts": [{"functionCall": {"name": "search-catalog", "args": {"query": query}}}]}
 
-_graph = None
+    if name == "show-product":
+        args["sku"] = sku  # never a hallucinated sku — result.items[0].sku (spec)
+    elif name == "add-to-cart":
+        shown = _latest_response(messages, "show-product")
+        args["sku"] = str(shown.get("sku")) or sku
+        args.setdefault("qty", 1)
 
-
-def get_graph():
-    global _graph
-    if _graph is None:
-        _graph = build_graph()
-    return _graph
+    parts[0] = {"functionCall": {"name": name, "args": args}}
+    logger.info(f"graph: emit {name} args={args}")
+    return {"parts": parts}

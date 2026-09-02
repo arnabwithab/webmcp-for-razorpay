@@ -96,6 +96,17 @@
   // tools that navigate the store page — after their response the page unloads,
   // so the loop must stop and let the fresh iframe resume on the new page
   var NAVIGATORS = { 'search-catalog': 1, 'show-product': 1 };
+
+  // native WebMCP returns the tool result as a JSON string; the headless stub
+  // returns the object directly. Treat either as success unless it says ok:false.
+  function resultOk(result) {
+    if (result && typeof result === 'object') return result.ok !== false;
+    if (typeof result === 'string') {
+      try { var o = JSON.parse(result); return !o || o.ok !== false; } catch (e) { return true; }
+    }
+    return true;
+  }
+
   async function executeTool(name, args) {
     var ctx = document.modelContext || navigator.modelContext;
     var k = kit();
@@ -108,13 +119,13 @@
       var storeTools = await ctx.getTools({ fromOrigins: [STORE_ORIGIN] });
       var match = storeTools.find(function (t) { return norm(t.name) === name; });
       if (match) {
-        // native WebMCP (flagged Chrome) uses ctx.executeTool and expects a JSON string
-        // for input when inputSchema is stringified; headless stub uses match.execute(object)
+        // native WebMCP (flagged Chrome) expects stringified input when inputSchema
+        // is stringified; the headless stub uses match.execute(object)
         if (ctx.executeTool) {
-          try { return await ctx.executeTool(match, args); }
+          try { return await ctx.executeTool(match, JSON.stringify(args)); }
           catch (e) {
             if (String(e).includes('Failed to parse input')) {
-              return await ctx.executeTool(match, JSON.stringify(args));
+              return await ctx.executeTool(match, args);
             }
             throw e;
           }
@@ -141,7 +152,9 @@
         return;
       }
       var serializableTools = tools.map(function (t) {
-        return { name: t.name, description: t.description, parameters: t.parameters || t.inputSchema };
+        var schema = t.parameters || t.inputSchema || { type: 'object' };
+        if (typeof schema === 'string') { try { schema = JSON.parse(schema); } catch (e) { schema = { type: 'object' }; } }
+        return { name: t.name, description: t.description, parameters: schema };
       });
       var resp = await fetch('/agent/turn', {
         method: 'POST',
@@ -175,7 +188,7 @@
         // destroying this iframe — the functionResponse must hit sessionStorage first
         messages.push({ role: 'user', parts: [{ functionResponse: { name: call.name, response: response } }] });
         save();
-        if (NAVIGATORS[call.name] && response.result && response.result.ok !== false) {
+        if (NAVIGATORS[call.name] && resultOk(response.result)) {
           chip('navigating…');
           return; // page is unloading; resume on the fresh iframe continues the funnel
         }

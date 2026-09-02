@@ -4,12 +4,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 
-from agent.groq import GROQ_URL, SYSTEM_PROMPT, _from_groq, _to_groq_messages, generate_turn
 from agent.utils.config import settings
 from agent.utils.logger import logger
-
-# re-export for tests that patch app.generate_turn
-__all__ = ["generate_turn", "_to_groq_messages", "_from_groq", "GROQ_URL", "SYSTEM_PROMPT"]
 
 app = FastAPI(title="agent-backend", version="0.1.0")
 app.add_middleware(
@@ -25,31 +21,15 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 @app.post("/agent/turn")
 async def agent_turn(request: Request):
     body = await request.json()
-    # LangGraph orchestration v3: deterministic checkout funnel (no LLM in the loop).
-    # One /agent/turn = at most one fresh functionCall for the browser to execute.
+    # LLM-driven WebMCP checkout loop (spec §5-§7): one /agent/turn = one Groq
+    # tool-use decision that the browser executes via WebMCP, then posts back and
+    # asks for the next call. Stateless — no key ever reaches the browser.
     try:
-        from agent.graph import get_graph
+        from agent.graph import decide_turn
 
-        state = {
-            "messages": body.get("messages", []),
-            "tools": body.get("tools", []),
-            "ran": {},
-            "result": {"parts": []},
-            "pending": False,
-            "done": False,
-        }
-        result_state = get_graph().invoke(state, config={"recursion_limit": 30})
-        parts = (result_state.get("result") or {}).get("parts", [])
-        if not parts:
-            text = (
-                "Payment link is ready — click Open payment to pay."
-                if result_state.get("done")
-                else "I couldn't take that further — try searching for a product."
-            )
-            parts = [{"text": text}]
-        return {"parts": parts}
+        return decide_turn(body.get("messages", []), body.get("tools", []))
     except Exception as e:
-        logger.error(f"graph turn failed: {e}", exc_info=True)
+        logger.error(f"turn failed: {e}", exc_info=True)
         raise HTTPException(status_code=502, detail={"code": "model_error"})
 
 
@@ -77,7 +57,7 @@ input{flex:1;min-width:0;padding:8px;border-radius:8px;border:1px solid #d4d4d8}
 <div class="input-bar">
 <input id="q" placeholder="what do you want to buy?"><button id="send">Go</button><button id="stop">STOP</button>
 </div>
-<script src="/static/agent.js?v=10"></script>
+<script src="/static/agent.js?v=11"></script>
 </body></html>"""
     return _HR(content=html, headers={"Cache-Control": "no-store"})
 
