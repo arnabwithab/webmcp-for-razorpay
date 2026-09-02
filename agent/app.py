@@ -77,7 +77,7 @@ input{flex:1;min-width:0;padding:8px;border-radius:8px;border:1px solid #d4d4d8}
 <div class="input-bar">
 <input id="q" placeholder="what do you want to buy?"><button id="send">Go</button><button id="stop">STOP</button>
 </div>
-<script src="/static/agent.js?v=9"></script>
+<script src="/static/agent.js?v=10"></script>
 </body></html>"""
     return _HR(content=html, headers={"Cache-Control": "no-store"})
 

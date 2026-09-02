@@ -40,7 +40,7 @@ function ServerHtml({ route, css, js, appContext }: ServerHtmlProps) {
           <script src={src} key={index} />
         ))}
         {!route.isAdmin && (
-          <script src="http://localhost:9000/static/loader.js?v=9" defer />
+          <script src="http://localhost:9000/static/loader.js?v=10" defer />
         )}
       </body>
     </>

@@ -17,7 +17,13 @@ logs/
 node_modules/
 store/packages/*/dist/
 store/.evershop/
-store/.evershop-built/
+store/.evershop-built
 
 # OS / editor
 .DS_Store
+
+# local tooling (opencode, playwright, handoff)
+.agents/
+.playwright-cli/
+skills-lock.json
+docs/HANDOFF.md

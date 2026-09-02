@@ -73,7 +73,15 @@ def _last_search_result(msgs: List[Dict[str, Any]]) -> Dict[str, Any]:
         for p in m.get("parts", []):
             if "functionResponse" in p and p["functionResponse"].get("name") == "search-catalog":
                 resp = p["functionResponse"].get("response") or {}
-                result = resp.get("result") if isinstance(resp.get("result"), dict) else {}
+                result = resp.get("result")
+                # native WebMCP stringifies the tool result; headless returns the object directly
+                if isinstance(result, str):
+                    try:
+                        result = json.loads(result)
+                    except json.JSONDecodeError:
+                        result = {}
+                if not isinstance(result, dict):
+                    result = {}
                 return result
     return {}
 

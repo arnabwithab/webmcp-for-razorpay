@@ -27,7 +27,7 @@
   function inject(src) {
     if (injected(src)) return;
     var s = document.createElement('script');
-    s.src = src + '?v=9';
+    s.src = src + '?v=10';
     s.async = false;
     s.dataset.rzpInject = src;
     // R3 + retry: a failed fetch (sidecar restarting) removes the tag so the
@@ -40,7 +40,7 @@
     if (document.getElementById('rzp-agent-iframe')) return;
     var iframe = document.createElement('iframe');
     iframe.id = 'rzp-agent-iframe';
-    iframe.src = AGENT_ORIGIN + '/agent?v=9';
+    iframe.src = AGENT_ORIGIN + '/agent?v=10';
     iframe.allow = 'tools';
     iframe.style.cssText = 'position:fixed;top:12px;right:12px;width:360px;height:520px;' +
       'border:1px solid #d4d4d8;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);' +
