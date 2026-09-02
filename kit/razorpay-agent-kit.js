@@ -99,7 +99,7 @@
 
   function checkoutTool() {
     return createCheckout('agent').then(function (res) {
-      emit('checkout_opened', { link_id: res.linkId, amount_paise: res.amountPaise });
+      // checkout_opened is written server-side on /checkout/create — no client emit (was duplicated)
       openPaymentChip(res.shortUrl);
       return { linkId: res.linkId, shortUrl: res.shortUrl, amountPaise: res.amountPaise };
     });

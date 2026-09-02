@@ -93,6 +93,9 @@
   }
 
   function norm(n) { return String(n).replace(/_/g, '-'); }
+  // tools that navigate the store page — after their response the page unloads,
+  // so the loop must stop and let the fresh iframe resume on the new page
+  var NAVIGATORS = { 'search-catalog': 1, 'show-product': 1 };
   async function executeTool(name, args) {
     var ctx = document.modelContext || navigator.modelContext;
     var k = kit();
@@ -117,6 +120,13 @@
 
       chip('thinking…');
       var tools = await waitForTools();
+      console.info('[agent] tools=' + tools.length + ' kit=' + (kit() ? 'yes' : 'no'));
+      if (!tools.length) {
+        // never POST tools=[] — the server graph cannot act without tool defs
+        chip('');
+        addMsg('model', 'Store tools are still loading — please try again in a moment.');
+        return;
+      }
       var serializableTools = tools.map(function (t) {
         return { name: t.name, description: t.description, parameters: t.parameters };
       });
@@ -135,8 +145,12 @@
 
       if (fnCall) {
         var call = fnCall.functionCall;
+        if (textPart) addMsg('model', textPart.text); // chat line may travel with the call
         chip(call.name + '…');
-        messages.push({ role: 'model', parts: [{ functionCall: call }] });
+        messages.push({
+          role: 'model',
+          parts: textPart ? [{ text: textPart.text }, { functionCall: call }] : [{ functionCall: call }],
+        });
         save();
         var response;
         try {
@@ -148,6 +162,10 @@
         // destroying this iframe — the functionResponse must hit sessionStorage first
         messages.push({ role: 'user', parts: [{ functionResponse: { name: call.name, response: response } }] });
         save();
+        if (NAVIGATORS[call.name] && response.result && response.result.ok !== false) {
+          chip('navigating…');
+          return; // page is unloading; resume on the fresh iframe continues the funnel
+        }
         continue;
       }
 

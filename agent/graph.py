@@ -1,62 +1,45 @@
-"""LangGraph orchestration — deterministic blocks per tool, router for fresh queries.
+"""LangGraph orchestration v3 — deterministic checkout funnel (no LLM in the loop).
 
-Replaces the single-shot Groq loop that let the model re-search forever.
-Each tool gets its own block (exactly one tool in the Groq request), and a
-lightweight router picks the block for a fresh user turn. The browser still
-executes the store tools via WebMCP; this graph only decides *which* tool to
-call next and returns that single tool_call/text to the frontend loop.
+    START → user_turn → search-catalog → show-product → add-to-cart → read-cart → checkout → END
 
-Multi-turn note: the frontend sends the FULL message history on every
-/agent/turn (one utterance spans several calls). The router therefore looks at
-the tools called *since the last user text* to advance the flow
-(search-catalog → show-product) instead of re-parsing keywords forever.
+Each node emits its functionCall at most once per utterance (nodes whose tool already
+ran in the ledger pass through), then HALTS the invoke: the browser executes the call
+via WebMCP and posts /agent/turn again, advancing the funnel one step. After checkout
+the funnel is closed for the utterance (spec Q2 hard end).
+
+No router, no chat node, no Groq calls — every failure observed on 2026-09-02
+(8x search loop, tool_choice:none 400s, "json"-tool hallucinations) lived in the
+LLM decision layer, while the tools themselves proved flawless when driven directly.
 """
 
+import json
 import re
 from typing import Any, Dict, List, TypedDict
 
-import httpx
 from langgraph.graph import END, StateGraph
 
-from agent import groq as groq_mod  # attribute access so tests can monkeypatch
-from agent.groq import _from_groq, _to_groq_messages
-from agent.utils.config import settings
 from agent.utils.logger import logger
 
-
-class AgentState(TypedDict):
-    messages: List[Dict[str, Any]]  # internal parts-based messages from the frontend
-    tools: List[Dict[str, Any]]  # all 6 tool defs from the frontend
-    history: List[str]  # tool names called so far (logging)
-    next: str  # router decision
-    result: Dict[str, Any]  # final {parts: [...]}
-
-
-SEARCH_HINTS = (
-    "find",
-    "search",
-    "show me",
-    "looking for",
-    "bomber",
-    "jacket",
-    "dress",
-    "kurti",
-    "saree",
-    "palazzo",
-    "tee",
-    "shirt",
-    "sunglasses",
+# ponytail: regex filler-strip instead of an LLM call; extend it if the demo script needs more
+_QUERY_FILLER = re.compile(
+    r"^(please\s+)?(can\s+you\s+)?(find|show|get|search|look\s*for)(\s+(me|for))?\s+((a|an|the)\s+)?",
+    re.IGNORECASE,
 )
 
 
-def _tool_available(tools: List[Dict[str, Any]], name: str) -> bool:
-    return any(
-        t["name"] == name or t["name"].replace("-", "_") == name.replace("-", "_") for t in tools
-    )
+class AgentState(TypedDict):
+    messages: List[Dict[str, Any]]  # full frontend history (parts-based)
+    tools: List[Dict[str, Any]]  # all tool defs from the frontend
+    ran: Dict[str, str]  # tool -> args-json, executed since the last user text
+    result: Dict[str, Any]  # {parts: [...]} accumulated this invoke
+    pending: bool  # True once a fresh functionCall awaits browser execution
+    done: bool  # checkout already finished this utterance (hard end, spec Q2)
+
+
+# ---------------------------------------------------------------- helpers
 
 
 def _last_user_text(msgs: List[Dict[str, Any]]) -> str:
-    """Last user message with a text part (skips functionResponse-only messages)."""
     for m in reversed(msgs):
         if m.get("role") != "user":
             continue
@@ -66,227 +49,140 @@ def _last_user_text(msgs: List[Dict[str, Any]]) -> str:
     return ""
 
 
-def _segment(msgs: List[Dict[str, Any]]):
-    """Tools called since the last user text + whether the last one succeeded.
-
-    Returns (called, last_ok): `called` is a list of tool names in order,
-    `last_ok` is True/False from the last functionResponse (None if none yet).
-    """
-    called: List[str] = []
-    last_ok = None
+def _seed_ran(msgs: List[Dict[str, Any]]) -> Dict[str, str]:
+    """Tools already executed since the last user text (name -> args json)."""
+    ran: Dict[str, str] = {}
     for m in msgs:
         if m.get("role") == "user" and any("text" in p for p in m.get("parts", [])):
-            called, last_ok = [], None  # fresh user utterance restarts the segment
+            ran = {}  # fresh utterance restarts the ledger
             continue
         for p in m.get("parts", []):
             if "functionCall" in p:
-                called.append(p["functionCall"]["name"].replace("_", "-"))
-            elif "functionResponse" in p:
+                call = p["functionCall"]
+                ran[call["name"].replace("_", "-")] = json.dumps(
+                    call.get("args", {}), sort_keys=True
+                )
+    return ran
+
+
+def _last_search_result(msgs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Most recent search-catalog functionResponse payload ({count, items:[...]})."""
+    for m in reversed(msgs):
+        if m.get("role") != "user":
+            continue
+        for p in m.get("parts", []):
+            if "functionResponse" in p and p["functionResponse"].get("name") == "search-catalog":
                 resp = p["functionResponse"].get("response") or {}
                 result = resp.get("result") if isinstance(resp.get("result"), dict) else {}
-                last_ok = "error" not in resp and result.get("ok") is not False
-    return called, last_ok
+                return result
+    return {}
 
 
-def router_node(state: AgentState) -> Dict[str, Any]:
-    """Deterministic routing for demo intents + follow-up turns.
-
-    Fresh user text:  find/show X → search-catalog; add X (to cart) → add-to-cart;
-    what's in my cart → read-cart; checkout/pay → checkout; resume → resume-checkout;
-    anything else → fallback text.
-    Follow-up (tool already ran this utterance): advance search-catalog → show-product;
-    after show-product / add-to-cart / checkout succeeded, stop with a text summary —
-    never auto-chain into cart/checkout.
-    """
-    msgs = state["messages"]
-    tools = state["tools"]
-
-    if not tools:
-        # kit not loaded in the iframe yet — answer as text, a tool call would be a
-        # hallucination (log evidence: tool_use_failed with tools=[])
-        nxt = "fallback"
-    else:
-        called, last_ok = _segment(msgs)
-        if called:
-            last = called[-1]
-            failed = last_ok is False
-            if last == "search-catalog":
-                nxt = "fallback" if failed else "show-product"
-            elif last == "show-product":
-                # failed open (bad sku): one retry, then stop
-                nxt = "show-product" if failed and called.count("show-product") < 2 else "fallback"
-            elif last == "add-to-cart":
-                # failure is usually 'not on the product page' — open it, then retry
-                nxt = "show-product" if failed else "fallback"
-            else:
-                nxt = "fallback"
-        else:
-            text = _last_user_text(msgs)
-            if any(k in text for k in ("checkout", "pay", "buy now", "place order")):
-                nxt = "checkout"
-            elif any(k in text for k in ("resume", "pending", "expired")):
-                nxt = "resume-checkout"
-            elif re.search(r"\badd\b", text):
-                nxt = "add-to-cart"
-            elif re.search(r"(what|show|view|read)\b.*\b(cart|bag)\b|\bin my cart\b", text):
-                nxt = "read-cart"
-            elif any(k in text for k in SEARCH_HINTS):
-                nxt = "search-catalog"
-            else:
-                nxt = "fallback"
-
-    if nxt != "fallback" and not _tool_available(tools, nxt):
-        nxt = "fallback"
-
-    logger.info(
-        f"router → {nxt} for query '{_last_user_text(msgs)[:60]}' "
-        f"history={state.get('history', [])}"
-    )
-    return {"next": nxt}
+def _first_sku(result: Dict[str, Any]) -> str:
+    items = result.get("items") or []
+    return str(items[0].get("sku")) if items else ""
 
 
-def _single_tool_call(state: AgentState, tool_name: str) -> Dict[str, Any]:
-    """Call Groq with exactly one tool available, return the model's single tool_call or text."""
-    tools = state["tools"]
-    # find the canonical tool def (handle hyphen/underscore)
-    canonical = None
-    for t in tools:
-        if t["name"] == tool_name or t["name"].replace("-", "_") == tool_name.replace("-", "_"):
-            canonical = t
-            break
-    if not canonical:
-        return {
-            "result": {"parts": [{"text": f"Tool {tool_name} not available."}]},
-            "history": state.get("history", []),
-        }
+def _emit_call(state: AgentState, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    state["result"]["parts"].append({"functionCall": {"name": name, "args": args}})
+    state["ran"][name] = json.dumps(args, sort_keys=True)
+    state["pending"] = True
+    logger.info(f"graph: emit {name} args={args}")
+    return state
 
-    groq_tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": canonical["name"],
-                "description": canonical.get("description", ""),
-                "parameters": canonical.get("parameters", {"type": "object", "properties": {}}),
-            },
-        }
-    ]
-    nudge = {
-        "role": "system",
-        "content": (
-            f"Call the {canonical['name']} tool now with the right arguments from the "
-            "conversation above. Use the tool results already present; never invent "
-            "SKUs or prices. Use hyphenated tool names exactly as given."
-        ),
+
+def _halt(state: AgentState) -> str:
+    return "halt" if state.get("pending") or state.get("done") else "continue"
+
+
+# ---------------------------------------------------------------- nodes
+
+
+def user_turn_node(state: AgentState) -> Dict[str, Any]:
+    utterance = _last_user_text(state["messages"])
+    ran = _seed_ran(state["messages"])
+    logger.info(f"graph: user_turn utterance={utterance[:60]!r} ran={list(ran)}")
+    return {
+        "ran": ran,
+        "result": {"parts": []},
+        "pending": False,
+        "done": "checkout" in ran,  # spec Q2: hard end after checkout
     }
-    body = {
-        "model": settings.groq_model,
-        "messages": _to_groq_messages(state["messages"]) + [nudge],
-        "temperature": 0.2,
-        "tools": groq_tools,
-        # no tool_choice: gpt-oss-20b on Groq ignores forced choices (logs show it
-        # emitting search-catalog under a forced show-product) — a nudge plus a
-        # single registered tool is the reliable constraint
-    }
-    try:
-        raw = groq_mod.generate_turn({"request_body": body})
-    except httpx.HTTPStatusError as err:  # tool_use_failed 400 — one clean retry
-        logger.warning(f"single-tool {tool_name} 400, retrying once: {err.response.text[:200]}")
-        raw = groq_mod.generate_turn({"request_body": body})
-    msg = raw.get("choices", [{}])[0].get("message", {})
-    result = _from_groq(msg)
-    # _from_groq returns {parts: [...]}, ensure at least one part
-    if not result.get("parts"):
-        result = {"parts": [{"text": msg.get("content") or "Done."}]}
-    return {"result": result, "history": state.get("history", []) + [tool_name]}
 
 
 def search_node(state: AgentState) -> Dict[str, Any]:
-    return _single_tool_call(state, "search-catalog")
+    if not state["tools"]:
+        state["result"]["parts"].append(
+            {"text": "Store tools are still loading — try again in a moment."}
+        )
+        state["pending"] = True  # halt; nothing else can run this invoke
+        logger.info("graph: search skip — no tools loaded in iframe yet")
+        return state
+    if "search-catalog" in state["ran"]:
+        logger.info(f"graph: search skip — already ran args={state['ran']['search-catalog']}")
+        return state
+    query = _QUERY_FILLER.sub("", _last_user_text(state["messages"])).strip()
+    if not query:
+        logger.info("graph: search skip — no utterance text")
+        return state
+    return _emit_call(state, "search-catalog", {"query": query})
 
 
 def show_node(state: AgentState) -> Dict[str, Any]:
-    return _single_tool_call(state, "show-product")
+    if "show-product" in state["ran"]:
+        logger.info(f"graph: show skip — already ran args={state['ran']['show-product']}")
+        return state
+    sku = _first_sku(_last_search_result(state["messages"]))
+    if not sku:
+        logger.info("graph: show skip — no search result to open")
+        return state
+    return _emit_call(state, "show-product", {"sku": sku})
 
 
 def add_node(state: AgentState) -> Dict[str, Any]:
-    return _single_tool_call(state, "add-to-cart")
+    if "add-to-cart" in state["ran"]:
+        return state
+    sku = _first_sku(_last_search_result(state["messages"]))
+    if not sku:
+        return state
+    return _emit_call(state, "add-to-cart", {"sku": sku, "qty": 1})
 
 
 def read_node(state: AgentState) -> Dict[str, Any]:
-    return _single_tool_call(state, "read-cart")
+    if "read-cart" in state["ran"] or "add-to-cart" not in state["ran"]:
+        return state
+    return _emit_call(state, "read-cart", {})
 
 
 def checkout_node(state: AgentState) -> Dict[str, Any]:
-    return _single_tool_call(state, "checkout")
+    if "checkout" in state["ran"] or "add-to-cart" not in state["ran"]:
+        return state
+    return _emit_call(state, "checkout", {})
 
 
-def resume_node(state: AgentState) -> Dict[str, Any]:
-    return _single_tool_call(state, "resume-checkout")
-
-
-def fallback_node(state: AgentState) -> Dict[str, Any]:
-    """No tool next — answer as text. No tools are offered and validation stays on;
-    disable_tool_validation with an empty tool list is what let the model emit
-    hallucinated tool JSON and 400 the whole turn."""
-    body = {
-        "model": settings.groq_model,
-        "messages": _to_groq_messages(state["messages"])
-        + [
-            {
-                "role": "system",
-                "content": "Reply to the user in one short sentence based on the "
-                "conversation above. Do not call any tools.",
-            }
-        ],
-        "temperature": 0.2,
-    }
-    raw = groq_mod.generate_turn({"request_body": body})
-    msg = raw.get("choices", [{}])[0].get("message", {})
-    result = _from_groq(msg)
-    if not result.get("parts"):
-        result = {
-            "parts": [{"text": msg.get("content") or "I can only help you shop on this store."}]
-        }
-    return {"result": result}
+# ---------------------------------------------------------------- graph
 
 
 def build_graph():
     g = StateGraph(AgentState)
-    g.add_node("router", router_node)
+    g.add_node("user_turn", user_turn_node)
     g.add_node("search-catalog", search_node)
     g.add_node("show-product", show_node)
     g.add_node("add-to-cart", add_node)
     g.add_node("read-cart", read_node)
     g.add_node("checkout", checkout_node)
-    g.add_node("resume-checkout", resume_node)
-    g.add_node("fallback", fallback_node)
 
-    g.set_entry_point("router")
-    # conditional edges ONLY — an extra unconditional edge made the fallback node
-    # run in parallel with every routed block (duplicate Groq calls + 400s)
-    g.add_conditional_edges(
-        "router",
-        lambda s: s["next"],
-        {
-            "search-catalog": "search-catalog",
-            "show-product": "show-product",
-            "add-to-cart": "add-to-cart",
-            "read-cart": "read-cart",
-            "checkout": "checkout",
-            "resume-checkout": "resume-checkout",
-            "fallback": "fallback",
-        },
-    )
-    for n in [
-        "search-catalog",
-        "show-product",
-        "add-to-cart",
-        "read-cart",
-        "checkout",
-        "resume-checkout",
-        "fallback",
-    ]:
-        g.add_edge(n, END)
+    g.set_entry_point("user_turn")
+    funnel = [
+        ("user_turn", "search-catalog"),
+        ("search-catalog", "show-product"),
+        ("show-product", "add-to-cart"),
+        ("add-to-cart", "read-cart"),
+        ("read-cart", "checkout"),
+    ]
+    for src, dst in funnel:
+        g.add_conditional_edges(src, _halt, {"halt": END, "continue": dst})
+    g.add_edge("checkout", END)
     return g.compile()
 
 

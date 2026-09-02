@@ -70,7 +70,7 @@
   function pay() {
     if (!taskStarted()) startTask();
     kit.createCheckout(ARM).then(function (res) {
-      emit('checkout_opened', { link_id: res.linkId, amount_paise: res.amountPaise });
+      // checkout_opened is written server-side on /checkout/create — no client emit (was duplicated)
       window.open(res.shortUrl, '_blank');
       emit('payment_opened', { shortUrl: res.shortUrl });
     }).catch(function (err) {

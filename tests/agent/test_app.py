@@ -1,10 +1,6 @@
-import json
-
 import pytest
 from fastapi.testclient import TestClient
 
-import agent.app as app_module
-import agent.groq as groq_module
 from agent.app import app
 
 
@@ -13,145 +9,189 @@ def client():
     return TestClient(app)
 
 
-def test_turn_proxies_groq_with_system_prompt_and_tools(client, monkeypatch):
-    captured = {}
+def _tools(*names):
+    return [
+        {"name": n, "description": f"{n} desc", "parameters": {"type": "object"}} for n in names
+    ]
 
-    def fake_generate(payload):
-        captured.update(payload)
-        return {"choices": [{"message": {"role": "assistant", "content": "found it"}}]}
 
-    monkeypatch.setattr(app_module, "generate_turn", fake_generate)
-    monkeypatch.setattr(groq_module, "generate_turn", fake_generate)
+def _resp(name, result):
+    """A user message carrying one functionResponse part."""
+    return {
+        "role": "user",
+        "parts": [{"functionResponse": {"name": name, "response": {"result": result}}}],
+    }  # noqa: E501
+
+
+def _call(name, args):
+    """A model message carrying one functionCall part."""
+    return {"role": "model", "parts": [{"functionCall": {"name": name, "args": args}}]}
+
+
+ITEMS = {"ok": True, "count": 1, "items": [{"sku": "NJ-01", "name": "Red Jersey", "url": "/x"}]}
+
+
+def test_fresh_turn_emits_search_call(client):
+    """Fresh utterance → the funnel emits exactly one search-catalog call."""
     resp = client.post(
         "/agent/turn",
         json={
             "messages": [{"role": "user", "parts": [{"text": "find a red jersey"}]}],
-            "tools": [
-                {"name": "search-catalog", "description": "d", "parameters": {"type": "object"}}
-            ],
+            "tools": _tools("search-catalog", "show-product", "add-to-cart"),
         },
-    )
-    assert resp.status_code == 200
-    assert resp.json() == {"parts": [{"text": "found it"}]}
-    sent = captured["request_body"]
-    # system prompt inline per spec §7, as first OpenAI-style message
-    assert sent["messages"][0]["role"] == "system"
-    assert "resume-checkout" in sent["messages"][0]["content"]
-    # tools in OpenAI function-call shape
-    assert sent["tools"][0]["type"] == "function"
-    assert sent["tools"][0]["function"]["name"] == "search-catalog"
-    # stateless: only client-sent messages after system
-    assert sent["messages"][1] == {"role": "user", "content": "find a red jersey"}
-
-
-def test_turn_translates_tool_calls_roundtrip(client, monkeypatch):
-    def fake_generate(payload):
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "role": "assistant",
-                        "content": None,
-                        "tool_calls": [
-                            {
-                                "id": "call_abc",
-                                "type": "function",
-                                "function": {
-                                    "name": "add-to-cart",
-                                    "arguments": '{"sku": "NJ-01"}',
-                                },
-                            }
-                        ],
-                    }
-                }
-            ]
-        }
-
-    monkeypatch.setattr(app_module, "generate_turn", fake_generate)
-    monkeypatch.setattr(groq_module, "generate_turn", fake_generate)
-    resp = client.post(
-        "/agent/turn",
-        json={
-            "messages": [{"role": "user", "parts": [{"text": "add a jersey"}]}],
-            "tools": [],
-        },
-    )
-    assert resp.json() == {
-        "parts": [{"functionCall": {"name": "add-to-cart", "args": {"sku": "NJ-01"}}}]
-    }
-
-
-def test_turn_translates_function_response_to_tool_message(client, monkeypatch):
-    captured = {}
-
-    def fake_generate(payload):
-        captured.update(payload)
-        return {"choices": [{"message": {"role": "assistant", "content": "done"}}]}
-
-    monkeypatch.setattr(app_module, "generate_turn", fake_generate)
-    monkeypatch.setattr(groq_module, "generate_turn", fake_generate)
-    client.post(
-        "/agent/turn",
-        json={
-            "messages": [
-                {"role": "user", "parts": [{"text": "hi"}]},
-                {"role": "model", "parts": [{"functionCall": {"name": "read-cart", "args": {}}}]},
-                {
-                    "role": "user",
-                    "parts": [
-                        {"functionResponse": {"name": "read-cart", "response": {"result": []}}}
-                    ],
-                },
-            ],
-            "tools": [],
-        },
-    )
-    msgs = captured["request_body"]["messages"]
-    assert msgs[1]["role"] == "user"  # system is msgs[0]
-    assert msgs[2]["role"] == "assistant"
-    assert msgs[2]["tool_calls"][0]["function"]["name"] == "read-cart"
-    call_id = msgs[2]["tool_calls"][0]["id"]
-    assert msgs[3]["role"] == "tool"
-    assert msgs[3]["tool_call_id"] == call_id
-    assert json.loads(msgs[3]["content"]) == {"result": []}
-
-
-def test_turn_never_leaks_key(client, monkeypatch):
-    def fake_generate(payload):
-        return {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
-
-    monkeypatch.setattr(app_module, "generate_turn", fake_generate)
-    monkeypatch.setattr(groq_module, "generate_turn", fake_generate)
-    resp = client.post(
-        "/agent/turn",
-        json={"messages": [{"role": "user", "parts": [{"text": "hi"}]}], "tools": []},
-    )
-    assert "groq_dummy" not in resp.text
-
-
-def test_turn_groq_error_maps_to_502(client, monkeypatch):
-    def boom(payload):
-        raise RuntimeError("upstream down")
-
-    monkeypatch.setattr(app_module, "generate_turn", boom)
-    monkeypatch.setattr(groq_module, "generate_turn", boom)
-    resp = client.post("/agent/turn", json={"messages": [], "tools": []})
-    assert resp.status_code == 502
-
-
-def test_turn_empty_groq_message_returns_visible_text(client, monkeypatch):
-    def fake_generate(payload):
-        return {"choices": [{"message": {"role": "assistant", "content": ""}}]}
-
-    monkeypatch.setattr(app_module, "generate_turn", fake_generate)
-    monkeypatch.setattr(groq_module, "generate_turn", fake_generate)
-    resp = client.post(
-        "/agent/turn",
-        json={"messages": [{"role": "user", "parts": [{"text": "hi"}]}], "tools": []},
     )
     assert resp.status_code == 200
     parts = resp.json()["parts"]
-    assert parts and parts[0]["text"]  # never hand the frontend loop silence
+    assert len(parts) == 1
+    call = parts[0]["functionCall"]
+    assert call["name"] == "search-catalog"
+    assert "jersey" in call["args"]["query"]
+
+
+def test_after_search_emits_show_call(client):
+    """search-catalog done → next turn emits show-product with the found sku."""
+    messages = [
+        {"role": "user", "parts": [{"text": "find a red jersey"}]},
+        _call("search-catalog", {"query": "red jersey"}),
+        _resp("search-catalog", ITEMS),
+    ]
+    resp = client.post(
+        "/agent/turn",
+        json={"messages": messages, "tools": _tools("search-catalog", "show-product")},
+    )
+    assert resp.status_code == 200
+    parts = resp.json()["parts"]
+    assert len(parts) == 1
+    call = parts[0]["functionCall"]
+    assert call["name"] == "show-product"
+    assert call["args"]["sku"] == "NJ-01"
+
+
+def test_after_show_emits_add(client):
+    """search+show done → the funnel adds the shown sku to the cart."""
+    messages = [
+        {"role": "user", "parts": [{"text": "find a red jersey"}]},
+        _call("search-catalog", {"query": "red jersey"}),
+        _resp("search-catalog", ITEMS),
+        _call("show-product", {"sku": "NJ-01"}),
+        _resp("show-product", {"ok": True, "sku": "NJ-01"}),
+    ]
+    resp = client.post(
+        "/agent/turn",
+        json={
+            "messages": messages,
+            "tools": _tools("search-catalog", "show-product", "add-to-cart"),
+        },
+    )
+    assert resp.status_code == 200
+    call = resp.json()["parts"][0]["functionCall"]
+    assert call["name"] == "add-to-cart"
+    assert call["args"] == {"sku": "NJ-01", "qty": 1}
+
+
+def test_after_add_emits_read_cart(client):
+    messages = [
+        {"role": "user", "parts": [{"text": "find a red jersey"}]},
+        _call("search-catalog", {"query": "red jersey"}),
+        _resp("search-catalog", ITEMS),
+        _call("show-product", {"sku": "NJ-01"}),
+        _resp("show-product", {"ok": True, "sku": "NJ-01"}),
+        _call("add-to-cart", {"sku": "NJ-01", "qty": 1}),
+        _resp("add-to-cart", {"ok": True, "cartCount": 1}),
+    ]
+    resp = client.post(
+        "/agent/turn",
+        json={"messages": messages, "tools": _tools("search-catalog", "read-cart")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["parts"][0]["functionCall"]["name"] == "read-cart"
+
+
+def test_after_read_emits_checkout(client):
+    messages = [
+        {"role": "user", "parts": [{"text": "find a red jersey"}]},
+        _call("search-catalog", {"query": "red jersey"}),
+        _resp("search-catalog", ITEMS),
+        _call("show-product", {"sku": "NJ-01"}),
+        _resp("show-product", {"ok": True, "sku": "NJ-01"}),
+        _call("add-to-cart", {"sku": "NJ-01", "qty": 1}),
+        _resp("add-to-cart", {"ok": True, "cartCount": 1}),
+        _call("read-cart", {}),
+        _resp("read-cart", {"ok": True, "totalQty": 1, "grandTotal": 2499}),
+    ]
+    resp = client.post(
+        "/agent/turn",
+        json={"messages": messages, "tools": _tools("search-catalog", "checkout")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["parts"][0]["functionCall"]["name"] == "checkout"
+
+
+def test_checkout_hard_ends(client):
+    """Q2: after checkout runs, the funnel is closed — payment text, no further calls."""
+    messages = [
+        {"role": "user", "parts": [{"text": "checkout"}]},
+        _call("search-catalog", {"query": "checkout"}),
+        _resp("search-catalog", {"ok": True, "count": 0, "items": []}),
+        _call("checkout", {}),
+        _resp("checkout", {"ok": True, "linkId": "plink_1", "shortUrl": "https://rzp.io/i/1"}),
+    ]
+    resp = client.post(
+        "/agent/turn",
+        json={"messages": messages, "tools": _tools("search-catalog", "checkout")},
+    )
+    assert resp.status_code == 200
+    parts = resp.json()["parts"]
+    assert not any("functionCall" in p for p in parts)
+    assert "Payment link is ready" in parts[0]["text"]
+
+
+def test_empty_search_ends_without_calls(client):
+    """Search found nothing → funnel passes through, no calls, generic fallback text."""
+    messages = [
+        {"role": "user", "parts": [{"text": "find a red jersey"}]},
+        _call("search-catalog", {"query": "red jersey"}),
+        _resp("search-catalog", {"ok": True, "count": 0, "items": []}),
+    ]
+    resp = client.post(
+        "/agent/turn",
+        json={"messages": messages, "tools": _tools("search-catalog", "show-product")},
+    )
+    assert resp.status_code == 200
+    parts = resp.json()["parts"]
+    assert not any("functionCall" in p for p in parts)
+    assert "couldn't take that further" in parts[0]["text"]
+
+
+def test_no_tools_halts_with_loading_text(client):
+    """tools=[] (stale iframe) → visible loading text, never a crash."""
+    resp = client.post(
+        "/agent/turn",
+        json={"messages": [{"role": "user", "parts": [{"text": "hi"}]}], "tools": []},
+    )
+    assert resp.status_code == 200
+    assert "still loading" in resp.json()["parts"][0]["text"]
+
+
+def test_search_query_strips_command_filler(client):
+    """Raw utterances make bad EverShop keyword queries — strip 'find me a' etc."""
+    resp = client.post(
+        "/agent/turn",
+        json={
+            "messages": [{"role": "user", "parts": [{"text": "find me a rust bomber jacket"}]}],
+            "tools": _tools("search-catalog"),
+        },
+    )
+    call = resp.json()["parts"][0]["functionCall"]
+    assert call["args"]["query"] == "rust bomber jacket"
+
+
+def test_never_leaks_key(client):
+    resp = client.post(
+        "/agent/turn",
+        json={"messages": [{"role": "user", "parts": [{"text": "hi"}]}], "tools": []},
+    )
+    assert "gsk_" not in resp.text
 
 
 def test_agent_panel_served(client):

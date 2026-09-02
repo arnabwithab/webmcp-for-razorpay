@@ -25,65 +25,32 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 @app.post("/agent/turn")
 async def agent_turn(request: Request):
     body = await request.json()
-    # Try LangGraph orchestration for more deterministic tool choice
-    # (falls back to direct Groq on any error so tests and simple requests keep working)
+    # LangGraph orchestration v3: deterministic checkout funnel (no LLM in the loop).
+    # One /agent/turn = at most one fresh functionCall for the browser to execute.
     try:
         from agent.graph import get_graph
-
-        # build history for loop guard
-        history = []
-        for m in body.get("messages", []):
-            for p in m.get("parts", []):
-                if "functionCall" in p:
-                    history.append(p["functionCall"]["name"])
 
         state = {
             "messages": body.get("messages", []),
             "tools": body.get("tools", []),
-            "history": history,
-            "next": "",
-            "result": {},
+            "ran": {},
+            "result": {"parts": []},
+            "pending": False,
+            "done": False,
         }
-        graph = get_graph()
-        # Use invoke for sync execution (graph is small, no async needed)
-        result_state = graph.invoke(state)
-        if result_state.get("result") and result_state["result"].get("parts") is not None:
-            return result_state["result"]
+        result_state = get_graph().invoke(state, config={"recursion_limit": 30})
+        parts = (result_state.get("result") or {}).get("parts", [])
+        if not parts:
+            text = (
+                "Payment link is ready — click Open payment to pay."
+                if result_state.get("done")
+                else "I couldn't take that further — try searching for a product."
+            )
+            parts = [{"text": text}]
+        return {"parts": parts}
     except Exception as e:
-        logger.warning(f"graph fallback to direct groq: {e}")
-
-    # Fallback: direct single-shot Groq (original behavior, used by tests)
-    tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": t["name"],
-                "description": t.get("description", ""),
-                "parameters": t.get("parameters", {"type": "object", "properties": {}}),
-            },
-        }
-        for t in body.get("tools", [])
-    ]
-    request_body = {
-        "model": settings.groq_model,
-        "messages": _to_groq_messages(body.get("messages", [])),
-        "temperature": 0.2,
-        "disable_tool_validation": True,
-    }
-    if tools:
-        request_body["tools"] = tools
-
-    try:
-        raw = generate_turn({"request_body": request_body})
-    except Exception as err:
-        logger.error(f"groq turn failed: {err}")
+        logger.error(f"graph turn failed: {e}", exc_info=True)
         raise HTTPException(status_code=502, detail={"code": "model_error"})
-
-    message = raw.get("choices", [{}])[0].get("message", {})
-    parts = _from_groq(message).get("parts", [])
-    if not parts:  # empty turn — never hand the loop silence (it would end invisibly)
-        return {"parts": [{"text": "Sorry — I hit a snag mid-thought. Please try again."}]}
-    return {"parts": parts}
 
 
 @app.get("/agent", response_class=HTMLResponse)
@@ -108,7 +75,7 @@ input{flex:1;min-width:0;padding:8px;border-radius:8px;border:1px solid #d4d4d8}
 <div class="input-bar">
 <input id="q" placeholder="what do you want to buy?"><button id="send">Go</button><button id="stop">STOP</button>
 </div>
-<script src="/static/agent.js?v=5"></script>
+<script src="/static/agent.js?v=6"></script>
 </body></html>"""
 
 
