@@ -67,6 +67,43 @@ def _first_sku(result: Dict[str, Any]) -> str:
     return str(items[0].get("sku")) if items else ""
 
 
+def _all_search_items(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """All items from all search-catalog responses in order."""
+    out: List[Dict[str, Any]] = []
+    for m in messages:
+        for p in m.get("parts", []):
+            if "functionResponse" in p and p["functionResponse"].get("name") == "search-catalog":
+                resp = p["functionResponse"].get("response") or {}
+                result = resp.get("result")
+                if isinstance(result, str):
+                    try:
+                        result = json.loads(result)
+                    except json.JSONDecodeError:
+                        result = {}
+                if isinstance(result, dict):
+                    out.extend(result.get("items") or [])
+    return out
+
+
+def _added_skus(messages: List[Dict[str, Any]]) -> set:
+    return {
+        p["functionCall"]["args"].get("sku")
+        for m in messages
+        for p in m.get("parts", [])
+        if "functionCall" in p and p["functionCall"].get("name") == "add-to-cart"
+    }
+
+
+def _next_sku(messages: List[Dict[str, Any]]) -> str:
+    """First SKU from search results not yet added."""
+    added = _added_skus(messages)
+    for it in _all_search_items(messages):
+        sku = str(it.get("sku") or "")
+        if sku and sku not in added:
+            return sku
+    return _first_sku(_latest_response(messages, "search-catalog"))
+
+
 def _has_call(msgs: List[Dict[str, Any]], name: str) -> bool:
     return any(
         p.get("functionCall", {}).get("name") == name
@@ -169,10 +206,25 @@ def decide_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> 
         return {"parts": [{"functionCall": {"name": "search-catalog", "args": {"query": query}}}]}
 
     if name == "show-product":
-        args["sku"] = sku  # never a hallucinated sku — result.items[0].sku (spec)
+        # for multi-item carts, pick the next SKU not yet shown
+        shown_skus = {
+            p["functionCall"]["args"].get("sku")
+            for m in messages
+            for p in m.get("parts", [])
+            if "functionCall" in p and p["functionCall"].get("name") == "show-product"
+        }
+        nxt = _next_sku(messages)
+        if nxt and nxt not in shown_skus:
+            args["sku"] = nxt
+        else:
+            args["sku"] = sku  # fallback to first
     elif name == "add-to-cart":
-        shown = _latest_response(messages, "show-product")
-        args["sku"] = str(shown.get("sku")) or sku
+        nxt = _next_sku(messages)
+        if nxt:
+            args["sku"] = nxt
+        else:
+            shown = _latest_response(messages, "show-product")
+            args["sku"] = str(shown.get("sku")) or sku
         args.setdefault("qty", 1)
 
     parts[0] = {"functionCall": {"name": name, "args": args}}
