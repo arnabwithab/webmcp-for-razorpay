@@ -20,6 +20,8 @@ SYSTEM_PROMPT = (
     "If the user wants multiple items (e.g., carrots, onions, eggs), handle them "
     "one by one: search for the first item, add it, then search for the next item, "
     "add it, and so on until all are in the cart, then checkout. "  # noqa: E501
+    "Never call checkout before at least one add-to-cart has succeeded and the cart "
+    "has items; read-cart is optional to verify. "  # noqa: E501
     "Do not call the same tool twice with the same arguments; if a search returns "
     "items, proceed immediately to show-product. "  # noqa: E501
     "After checkout, tell the user to click 'Open payment'. If payment is pending or "

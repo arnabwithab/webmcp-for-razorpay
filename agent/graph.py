@@ -205,6 +205,37 @@ def decide_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> 
         logger.info(f"graph: force search-first for {name}")
         return {"parts": [{"functionCall": {"name": "search-catalog", "args": {"query": query}}}]}
 
+    if name == "checkout":
+        # never checkout before the cart has items — force the missing step
+        has_add = _has_call(messages, "add-to-cart")
+        cart = _latest_response(messages, "read-cart")
+        cart_qty = cart.get("totalQty", 0) if isinstance(cart, dict) else 0
+        if not has_add and cart_qty == 0:
+            if not sku:
+                query = (
+                    _QUERY_FILLER.sub("", _last_user_text(messages)).strip()
+                    or args.get("query")
+                    or ""
+                )
+                logger.info("graph: force search-first for checkout (no cart)")
+                return {
+                    "parts": [
+                        {"functionCall": {"name": "search-catalog", "args": {"query": query}}}
+                    ]
+                }
+            nxt = _next_sku(messages)
+            if nxt:
+                logger.info("graph: force add-first for checkout")
+                return {
+                    "parts": [
+                        {"functionCall": {"name": "add-to-cart", "args": {"sku": nxt, "qty": 1}}}
+                    ]
+                }
+            logger.info("graph: force add-first for checkout (fallback)")
+            return {
+                "parts": [{"functionCall": {"name": "add-to-cart", "args": {"sku": sku, "qty": 1}}}]
+            }
+
     if name == "show-product":
         # for multi-item carts, pick the next SKU not yet shown
         shown_skus = {
