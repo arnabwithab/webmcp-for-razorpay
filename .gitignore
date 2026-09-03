@@ -27,3 +27,4 @@ store/.evershop-built
 .playwright-cli/
 skills-lock.json
 docs/HANDOFF.md
+docs/webmcp-pr-spec.md
