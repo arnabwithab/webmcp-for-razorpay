@@ -206,21 +206,24 @@ def decide_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> 
         return {"parts": [{"functionCall": {"name": "search-catalog", "args": {"query": query}}}]}
 
     if name == "checkout":
-        # never checkout before the cart has items — force the missing step
+        # sanitize hallucinated args (LLM sometimes sends {"": " "}) and guard
+        # against empty cart — manual adds aren't in messages history
+        args = {}
         has_add = _has_call(messages, "add-to-cart")
         cart = _latest_response(messages, "read-cart")
         cart_qty = cart.get("totalQty", 0) if isinstance(cart, dict) else 0
-        if not has_add and cart_qty == 0:
+        if cart_qty == 0 and not has_add:
             if not sku:
-                query = (
-                    _QUERY_FILLER.sub("", _last_user_text(messages)).strip()
-                    or args.get("query")
-                    or ""
-                )
+                query = _QUERY_FILLER.sub("", _last_user_text(messages)).strip() or ""
                 logger.info("graph: force search-first for checkout (no cart)")
                 return {
                     "parts": [
-                        {"functionCall": {"name": "search-catalog", "args": {"query": query}}}
+                        {
+                            "functionCall": {
+                                "name": "search-catalog",
+                                "args": {"query": query or "dress"},
+                            }
+                        }
                     ]
                 }
             nxt = _next_sku(messages)
@@ -235,6 +238,12 @@ def decide_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> 
             return {
                 "parts": [{"functionCall": {"name": "add-to-cart", "args": {"sku": sku, "qty": 1}}}]
             }
+        if cart_qty == 0 and has_add:
+            # cart empty but history has an add — likely manual cart or cleared cart; verify first
+            logger.info("graph: checkout with empty cart, forcing read-cart")
+            return {"parts": [{"functionCall": {"name": "read-cart", "args": {}}}]}
+        # cart has items or add in history — allow clean checkout
+        return {"parts": [{"functionCall": {"name": "checkout", "args": {}}}]}
 
     if name == "show-product":
         # for multi-item carts, pick the next SKU not yet shown
