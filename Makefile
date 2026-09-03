@@ -20,8 +20,8 @@ store: ## build (if needed) + run store in prod mode on :8000 (fast; dev mode is
 	@if [ ! -f store/.evershop-built ]; then cd store && DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=evershop DB_NAME=evershop npm run build && touch .evershop-built; fi
 	@cd store && DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=evershop DB_NAME=evershop PORT=8000 npm run start
 
-seed: ## seed fashion catalog (re-runnable; needs postgres up)
-	@cd store && DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=evershop DB_NAME=evershop node ../scripts/seed_fashion.js
+seed: ## seed grocery catalog (re-runnable; needs postgres up; image-first: fetch_grocery_images.js first)
+	@cd store && DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=evershop DB_NAME=evershop node ../scripts/seed_grocery.js
 
 dev: ## run sidecar :9000 + agent backend :8001 concurrently
 	@trap 'kill 0' EXIT; \
@@ -32,10 +32,10 @@ dev: ## run sidecar :9000 + agent backend :8001 concurrently
 snapshot: ## catalog snapshot -> sidecar/snapshot.json (store must be up on :8000)
 	@uv run python -m sidecar.snapshot
 
-reset: ## re-seed fashion catalog + clear carts/audit/links between takes
+reset: ## re-seed grocery catalog + clear carts/audit/links between takes
 	@rm -f audit.jsonl sidecar/links.json
 	@$(MAKE) seed
-	@echo "sidecar state cleared, catalog re-seeded"
+	@echo "sidecar state cleared, grocery catalog re-seeded"
 
 test: ## pytest + js smoke (cap, HMAC, hash-chain, poll, re-pricing, resume, 6 tools)
 	@uv run pytest -q

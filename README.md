@@ -32,7 +32,7 @@ Chrome (tiled, one take) ── both arms on the same store :8000
 ```bash
 make db        # postgres container
 make setup     # deps (store npm + uv sync) + .env
-make seed      # fashion catalog (22 products, INR)
+make seed      # grocery catalog (47 products, INR, image-first)
 make store     # store on :8000 (prod mode)
 make dev       # sidecar :9000 + agent :8001
 make snapshot  # canonical prices -> sidecar/snapshot.json
@@ -48,14 +48,14 @@ Store is [EverShop](https://github.com/evershopcommerce/evershop) v2.2.1 (commit
 | # | Change | Lines |
 |---|--------|-------|
 | 1 | `store/config/local.json` (port/currency/session config) | config only |
-| 2 | `store/media/fashion/` (25 local product images) | data only |
+| 2 | `store/media/grocery/` (47 local product images, image-first via `scripts/fetch_grocery_images.js`) | data only |
 | 3 | `store/extensions/session-shim/` — 6-line extension, upstream bug workaround (`/images` route crashes customer auth middleware; still broken upstream) | +6 (sanctioned extension hook, zero EverShop source touched) |
 | 4 | `store/.../Server.tsx` — 1 script tag `loader.js` on every frontStore page | 1 line (spec §4 budget line 1) |
 | 5 | `kit/webmcp-runtime.js` (vendored, MIT) + `kit/webmcp-store-tools.js` (4 store tools via `createToolScope`) — injected by loader | own line-item (spec §4 webmcpify count) |
 
 ## Repo layout
 
-`sidecar/` (FastAPI :9000 — payments, events, audit, compare) · `agent/` (FastAPI :8001 — Groq proxy + panel) · `kit/` (money tools + manual arm, injected) · `scripts/seed_fashion.js` (catalog seed) · `tests/` (pytest + JS smoke) · `docs/` (spec, runbook, features).
+`sidecar/` (FastAPI :9000 — payments, events, audit, compare) · `agent/` (FastAPI :8001 — Groq proxy + panel) · `kit/` (money tools + manual arm, injected) · `scripts/seed_grocery.js` (grocery catalog seed, 47 SKUs) · `tests/` (pytest + JS smoke) · `docs/` (spec, runbook, features).
 
 ## Commands
 

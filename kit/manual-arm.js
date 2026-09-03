@@ -67,17 +67,6 @@
   }
   setInterval(renderTimer, 1000);
 
-  function pay() {
-    if (!taskStarted()) startTask();
-    kit.createCheckout(ARM).then(function (res) {
-      // checkout_opened is written server-side on /checkout/create — no client emit (was duplicated)
-      window.open(res.shortUrl, '_blank');
-      emit('payment_opened', { shortUrl: res.shortUrl });
-    }).catch(function (err) {
-      alert('Checkout failed: ' + ((err && err.detail && err.detail.code) || 'unknown'));
-    });
-  }
-
   function mount() {
     if (document.getElementById('rzp-manual-overlay')) return;
     var box = document.createElement('div');
@@ -92,13 +81,8 @@
     var timer = document.createElement('span');
     timer.id = 'rzp-manual-timer';
     timer.textContent = '0s';
-    var payBtn = document.createElement('button');
-    payBtn.textContent = 'Pay';
-    payBtn.style.cssText = 'padding:8px 14px;border-radius:999px;border:0;background:#0b6bcb;color:#fff;cursor:pointer';
-    payBtn.onclick = pay;
     box.appendChild(start);
     box.appendChild(timer);
-    box.appendChild(payBtn);
     document.body.appendChild(box);
   }
 

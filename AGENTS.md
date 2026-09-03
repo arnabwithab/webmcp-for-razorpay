@@ -18,7 +18,7 @@ Agent-Native Checkout Race for Razorpay Buildathon (Tracks 01 Agentic Commerce +
 
 ## Tech Stack
 
-- **Store (cloned, committed in-repo):** EverShop v2.2.1 (Node + **Postgres** — v2.2.1 dropped Mongo; spec's Mongo note is stale), `store/` tracked as plain files (its `.git` removed), GPL-3.0 with credits in `store/CREDITS.md`. Catalog: 22 fashion products, Kids/Women/Men/Accessories, realistic INR pricing (₹299–₹2,999), local images in `store/media/fashion/`, featured grid on homepage. Re-seed: `make seed` (scripts/seed_fashion.js).
+- **Store (cloned, committed in-repo):** EverShop v2.2.1 (Node + **Postgres** — v2.2.1 dropped Mongo; spec's Mongo note is stale), `store/` tracked as plain files (its `.git` removed), GPL-3.0 with credits in `store/CREDITS.md`. Catalog: 47 grocery/essentials products, Staples/Fresh Produce/Dairy & Bakery/Beverages/Snacks & Household (5 categories, pack variants per SKU, 4 OOS), realistic INR pricing (₹20–₹1,299), local images in `store/media/grocery/` (image-first via `scripts/fetch_grocery_images.js`), featured grid on homepage. Re-seed: `make seed` (scripts/seed_grocery.js).
 - **Sidecar :9000:** FastAPI (Python) - `POST /checkout/create`, `POST /event`, `POST /webhook` (HMAC), `GET /poll/{id}`, `GET /compare`, `GET /audit`. Server-authoritative timers, hash-chained audit (`audit.jsonl`), snapshot re-pricing (INR-native — no currency conversion).
 - **Agent backend :8001:** FastAPI (Python) - `POST /agent/turn` (stateless Groq proxy — OpenAI-compatible chat.completions, `openai/gpt-oss-120b`, key never in browser), `GET /static/loader.js`, serves `agent` iframe.
 - **Kit / Frontend injected:** Vanilla JS - `kit/razorpay-agent-kit.js` (money tools `checkout`/`resume-checkout`), `kit/manual-arm.js` (capture listeners, overlay), `agent/static/agent.js` (client loop `getTools` -> `/agent/turn` -> `executeTool`). WebMCP via `webmcpify` (vendored runtime, `/.webmcpify/manifest.json`).
@@ -36,7 +36,7 @@ All commands runnable via `make <target>` from project root. Tools (`uvicorn`, `
 make store        # build (if needed) + run cloned store in prod mode on :8000
 make dev          # run sidecar :9000 + agent backend :8001 concurrently
 make db           # start postgres container (store DB)
-make seed         # seed fashion catalog (scripts/seed_fashion.js, re-runnable)
+make seed         # seed grocery catalog (scripts/seed_grocery.js, re-runnable; image-first)
 make snapshot     # catalog snapshot -> sidecar/snapshot.json (canonical INR pricing)
 make reset        # re-seed catalog + clear carts/audit/links between takes
 make test         # pytest + 1 JS smoke (cap, HMAC, hash-chain, poll, re-pricing, resume, 6 tools)
@@ -56,10 +56,10 @@ From spec §9 (authoritative):
 ```
 .
 ├── store/                       # EverShop v2.2.1 in-repo (its .git removed) - <=2 source lines + counted edits (see README)
-│   ├── media/fashion/           # local product images (Unsplash, credited)
+│   ├── media/grocery/           # local product images (loremflickr, credited; image-first)
 │   ├── extensions/session-shim/ # 6-line upstream-bug workaround (counted in README)
 │   └── CREDITS.md               # EverShop attribution (GPL-3.0)
-├── scripts/seed_fashion.js      # re-runnable fashion catalog seed (data, not store source)
+├── scripts/seed_grocery.js      # re-runnable grocery catalog seed (47 SKUs, image-first; data, not store source)
 ├── sidecar/
 │   ├── app.py                   # :9000 checkout, /event, /webhook(HMAC), /poll, /compare, /audit
 │   ├── compare.py               # groups audit by (task_id, arm); medians
@@ -237,5 +237,5 @@ Defined in `~/.config/opencode/agents/`, model `opencode-go/deepseek-v4-flash`.
 - **Audit:** `audit.jsonl` hash-chained (`prev_hash = sha256(prev_line)`), server `ts` authoritative, `make verify-audit` recomputes. `POST /event` schema: `{ts, session_id, arm, task_id, event, tool?, payload?, prev_hash}`.
 - **Recovery (Track 03):** decline -> pending chip -> `resume-checkout` -> expired mints fresh link -> paid; all in audit (spec G7/SC6).
 - **Spike kill-switch:** >30 min or weak UI -> swap candidate immediately (spec §4). (Resolved: EverShop kept, camera pass pending user review.)
-- **Never touch:** `store/` beyond the 2-line budget without listing in README (tracked edits: config/local.json, media/fashion/, extensions/session-shim, CREDITS.md); `audit.jsonl` (gitignored, append-only); pinned Chrome build (document `chrome://version` per spec R8).
+- **Never touch:** `store/` beyond the 2-line budget without listing in README (tracked edits: config/local.json, media/grocery/, extensions/session-shim, CREDITS.md); `audit.jsonl` (gitignored, append-only); pinned Chrome build (document `chrome://version` per spec R8).
 - **Known gotchas:** popup blocker (chip-button fix, spec R2), SPA nav kills injection (MutationObserver, R3), webhooks unreachable on localhost (poll-primary, R4), Groq RPM/latency (8-turn/60s cap, chips narrate latency, R5), EverShop public GraphQL `products` query capped at 20 items (snapshot fetches per-category).

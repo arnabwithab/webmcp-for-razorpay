@@ -1,47 +1,157 @@
 [
   {
-    "sku": "FASH-A06",
-    "name": "Leather Sling Bag",
+    "sku": "GROC-H09",
+    "name": "Kitchen Tissue Roll 2 pcs",
     "priceSource": {
-      "value": 1899,
+      "value": 99,
       "currency": "INR"
     },
-    "pricePaise": 189900,
-    "priceInrLabel": "\u20b91,899.00"
+    "pricePaise": 9900,
+    "priceInrLabel": "\u20b999.00"
   },
   {
-    "sku": "FASH-A05",
-    "name": "Classic Baseball Cap",
+    "sku": "GROC-H08",
+    "name": "Garbage Bags 30 pcs",
     "priceSource": {
-      "value": 499,
+      "value": 79,
       "currency": "INR"
     },
-    "pricePaise": 49900,
-    "priceInrLabel": "\u20b9499.00"
+    "pricePaise": 7900,
+    "priceInrLabel": "\u20b979.00"
   },
   {
-    "sku": "FASH-A04",
-    "name": "Round Metal Sunglasses",
+    "sku": "GROC-H06",
+    "name": "Dish Soap 500ml",
     "priceSource": {
-      "value": 899,
+      "value": 89,
       "currency": "INR"
     },
-    "pricePaise": 89900,
-    "priceInrLabel": "\u20b9899.00"
+    "pricePaise": 8900,
+    "priceInrLabel": "\u20b989.00"
   },
   {
-    "sku": "FASH-A03",
-    "name": "Classic Wayfarer Sunglasses",
+    "sku": "GROC-H05",
+    "name": "Instant Noodles 70g x4",
     "priceSource": {
-      "value": 999,
+      "value": 89,
       "currency": "INR"
     },
-    "pricePaise": 99900,
-    "priceInrLabel": "\u20b9999.00"
+    "pricePaise": 8900,
+    "priceInrLabel": "\u20b989.00"
   },
   {
-    "sku": "FASH-A02",
-    "name": "Printed Cotton Socks - Set of 3",
+    "sku": "GROC-H04",
+    "name": "Digestive Biscuits 250g",
+    "priceSource": {
+      "value": 49,
+      "currency": "INR"
+    },
+    "pricePaise": 4900,
+    "priceInrLabel": "\u20b949.00"
+  },
+  {
+    "sku": "GROC-H03",
+    "name": "Roasted Peanuts 200g",
+    "priceSource": {
+      "value": 89,
+      "currency": "INR"
+    },
+    "pricePaise": 8900,
+    "priceInrLabel": "\u20b989.00"
+  },
+  {
+    "sku": "GROC-H02",
+    "name": "Potato Chips 120g",
+    "priceSource": {
+      "value": 45,
+      "currency": "INR"
+    },
+    "pricePaise": 4500,
+    "priceInrLabel": "\u20b945.00"
+  },
+  {
+    "sku": "GROC-H01",
+    "name": "Salted Potato Chips 52g",
+    "priceSource": {
+      "value": 20,
+      "currency": "INR"
+    },
+    "pricePaise": 2000,
+    "priceInrLabel": "\u20b920.00"
+  },
+  {
+    "sku": "GROC-B08",
+    "name": "Green Tea Bags 25 pcs",
+    "priceSource": {
+      "value": 199,
+      "currency": "INR"
+    },
+    "pricePaise": 19900,
+    "priceInrLabel": "\u20b9199.00"
+  },
+  {
+    "sku": "GROC-B07",
+    "name": "Coconut Water 350ml",
+    "priceSource": {
+      "value": 45,
+      "currency": "INR"
+    },
+    "pricePaise": 4500,
+    "priceInrLabel": "\u20b945.00"
+  },
+  {
+    "sku": "GROC-B06",
+    "name": "Cola 2L",
+    "priceSource": {
+      "value": 99,
+      "currency": "INR"
+    },
+    "pricePaise": 9900,
+    "priceInrLabel": "\u20b999.00"
+  },
+  {
+    "sku": "GROC-B05",
+    "name": "Mineral Water 1L x6",
+    "priceSource": {
+      "value": 149,
+      "currency": "INR"
+    },
+    "pricePaise": 14900,
+    "priceInrLabel": "\u20b9149.00"
+  },
+  {
+    "sku": "GROC-B04",
+    "name": "Mango Juice 1L",
+    "priceSource": {
+      "value": 119,
+      "currency": "INR"
+    },
+    "pricePaise": 11900,
+    "priceInrLabel": "\u20b9119.00"
+  },
+  {
+    "sku": "GROC-B03",
+    "name": "Orange Juice 1L",
+    "priceSource": {
+      "value": 129,
+      "currency": "INR"
+    },
+    "pricePaise": 12900,
+    "priceInrLabel": "\u20b9129.00"
+  },
+  {
+    "sku": "GROC-B02",
+    "name": "Instant Coffee 100g",
+    "priceSource": {
+      "value": 249,
+      "currency": "INR"
+    },
+    "pricePaise": 24900,
+    "priceInrLabel": "\u20b9249.00"
+  },
+  {
+    "sku": "GROC-B01",
+    "name": "Darjeeling Tea 250g",
     "priceSource": {
       "value": 299,
       "currency": "INR"
@@ -50,173 +160,273 @@
     "priceInrLabel": "\u20b9299.00"
   },
   {
-    "sku": "FASH-A01",
-    "name": "Genuine Leather Belt",
+    "sku": "GROC-D09",
+    "name": "Cheese Slices 200g",
     "priceSource": {
-      "value": 799,
+      "value": 149,
       "currency": "INR"
     },
-    "pricePaise": 79900,
-    "priceInrLabel": "\u20b9799.00"
+    "pricePaise": 14900,
+    "priceInrLabel": "\u20b9149.00"
   },
   {
-    "sku": "FASH-M06",
-    "name": "Denim Trucker Jacket",
+    "sku": "GROC-D07",
+    "name": "Farm Eggs 6 pcs",
     "priceSource": {
-      "value": 2199,
+      "value": 49,
       "currency": "INR"
     },
-    "pricePaise": 219900,
-    "priceInrLabel": "\u20b92,199.00"
+    "pricePaise": 4900,
+    "priceInrLabel": "\u20b949.00"
   },
   {
-    "sku": "FASH-M05",
-    "name": "Rust Bomber Jacket",
+    "sku": "GROC-D06",
+    "name": "Farm Eggs 30 pcs",
     "priceSource": {
-      "value": 2499,
+      "value": 199,
       "currency": "INR"
     },
-    "pricePaise": 249900,
-    "priceInrLabel": "\u20b92,499.00"
+    "pricePaise": 19900,
+    "priceInrLabel": "\u20b9199.00"
   },
   {
-    "sku": "FASH-M04",
-    "name": "Men's Fleece Sweatshirt",
+    "sku": "GROC-D05",
+    "name": "Brown Bread 400g",
     "priceSource": {
-      "value": 1199,
+      "value": 55,
       "currency": "INR"
     },
-    "pricePaise": 119900,
-    "priceInrLabel": "\u20b91,199.00"
+    "pricePaise": 5500,
+    "priceInrLabel": "\u20b955.00"
   },
   {
-    "sku": "FASH-M03",
-    "name": "Crew-Neck Cotton Tee",
+    "sku": "GROC-D04",
+    "name": "White Bread 400g",
     "priceSource": {
-      "value": 599,
+      "value": 45,
       "currency": "INR"
     },
-    "pricePaise": 59900,
-    "priceInrLabel": "\u20b9599.00"
+    "pricePaise": 4500,
+    "priceInrLabel": "\u20b945.00"
   },
   {
-    "sku": "FASH-M02",
-    "name": "Printed Casual Shirt",
+    "sku": "GROC-D03",
+    "name": "Paneer 200g",
     "priceSource": {
-      "value": 1299,
+      "value": 89,
       "currency": "INR"
     },
-    "pricePaise": 129900,
-    "priceInrLabel": "\u20b91,299.00"
+    "pricePaise": 8900,
+    "priceInrLabel": "\u20b989.00"
   },
   {
-    "sku": "FASH-M01",
-    "name": "Classic Oxford Shirt",
+    "sku": "GROC-D02",
+    "name": "Curd Cup 400g",
     "priceSource": {
-      "value": 1499,
+      "value": 45,
       "currency": "INR"
     },
-    "pricePaise": 149900,
-    "priceInrLabel": "\u20b91,499.00"
+    "pricePaise": 4500,
+    "priceInrLabel": "\u20b945.00"
   },
   {
-    "sku": "FASH-W06",
-    "name": "Graphic Print Co-ord Set",
+    "sku": "GROC-D01",
+    "name": "Full-Cream Milk 1L",
     "priceSource": {
-      "value": 1799,
+      "value": 68,
       "currency": "INR"
     },
-    "pricePaise": 179900,
-    "priceInrLabel": "\u20b91,799.00"
+    "pricePaise": 6800,
+    "priceInrLabel": "\u20b968.00"
   },
   {
-    "sku": "FASH-W05",
-    "name": "Art Silk Saree",
+    "sku": "GROC-F10",
+    "name": "Lemons 500g",
     "priceSource": {
-      "value": 2999,
+      "value": 49,
       "currency": "INR"
     },
-    "pricePaise": 299900,
-    "priceInrLabel": "\u20b92,999.00"
+    "pricePaise": 4900,
+    "priceInrLabel": "\u20b949.00"
   },
   {
-    "sku": "FASH-W04",
-    "name": "Blush Palazzo Pants",
+    "sku": "GROC-F09",
+    "name": "Carrots 500g",
     "priceSource": {
-      "value": 899,
+      "value": 45,
       "currency": "INR"
     },
-    "pricePaise": 89900,
-    "priceInrLabel": "\u20b9899.00"
+    "pricePaise": 4500,
+    "priceInrLabel": "\u20b945.00"
   },
   {
-    "sku": "FASH-W03",
-    "name": "Off-Shoulder Party Dress",
+    "sku": "GROC-F08",
+    "name": "Shimla Apples 1kg",
     "priceSource": {
-      "value": 1799,
+      "value": 199,
       "currency": "INR"
     },
-    "pricePaise": 179900,
-    "priceInrLabel": "\u20b91,799.00"
+    "pricePaise": 19900,
+    "priceInrLabel": "\u20b9199.00"
   },
   {
-    "sku": "FASH-W02",
-    "name": "Floral Wrap Around Dress",
+    "sku": "GROC-F07",
+    "name": "Fresh Spinach Bunch",
     "priceSource": {
-      "value": 1299,
+      "value": 35,
       "currency": "INR"
     },
-    "pricePaise": 129900,
-    "priceInrLabel": "\u20b91,299.00"
+    "pricePaise": 3500,
+    "priceInrLabel": "\u20b935.00"
   },
   {
-    "sku": "FASH-W01",
-    "name": "Floral Print Midi Dress",
+    "sku": "GROC-F06",
+    "name": "Green Capsicum 500g",
     "priceSource": {
-      "value": 1499,
+      "value": 79,
       "currency": "INR"
     },
-    "pricePaise": 149900,
-    "priceInrLabel": "\u20b91,499.00"
+    "pricePaise": 7900,
+    "priceInrLabel": "\u20b979.00"
   },
   {
-    "sku": "FASH-K04",
-    "name": "Kids Party Frock",
+    "sku": "GROC-F05",
+    "name": "Baby Potatoes 1kg",
     "priceSource": {
-      "value": 899,
+      "value": 39,
       "currency": "INR"
     },
-    "pricePaise": 89900,
-    "priceInrLabel": "\u20b9899.00"
+    "pricePaise": 3900,
+    "priceInrLabel": "\u20b939.00"
   },
   {
-    "sku": "FASH-K03",
-    "name": "Kids Hooded Rain Jacket",
+    "sku": "GROC-F04",
+    "name": "Onions 2kg",
     "priceSource": {
-      "value": 999,
+      "value": 89,
       "currency": "INR"
     },
-    "pricePaise": 99900,
-    "priceInrLabel": "\u20b9999.00"
+    "pricePaise": 8900,
+    "priceInrLabel": "\u20b989.00"
   },
   {
-    "sku": "FASH-K02",
-    "name": "Kids Denim Jacket",
+    "sku": "GROC-F02",
+    "name": "Bananas Robusta 1kg",
     "priceSource": {
-      "value": 1199,
+      "value": 59,
       "currency": "INR"
     },
-    "pricePaise": 119900,
-    "priceInrLabel": "\u20b91,199.00"
+    "pricePaise": 5900,
+    "priceInrLabel": "\u20b959.00"
   },
   {
-    "sku": "FASH-K01",
-    "name": "Kids Printed Cotton T-Shirt",
+    "sku": "GROC-F01",
+    "name": "Alphonso Mangoes 1kg",
     "priceSource": {
       "value": 399,
       "currency": "INR"
     },
     "pricePaise": 39900,
     "priceInrLabel": "\u20b9399.00"
+  },
+  {
+    "sku": "GROC-H10",
+    "name": "Table Salt 1kg",
+    "priceSource": {
+      "value": 29,
+      "currency": "INR"
+    },
+    "pricePaise": 2900,
+    "priceInrLabel": "\u20b929.00"
+  },
+  {
+    "sku": "GROC-S10",
+    "name": "Rock Salt 1kg",
+    "priceSource": {
+      "value": 89,
+      "currency": "INR"
+    },
+    "pricePaise": 8900,
+    "priceInrLabel": "\u20b989.00"
+  },
+  {
+    "sku": "GROC-S08",
+    "name": "Sunflower Oil 1L",
+    "priceSource": {
+      "value": 199,
+      "currency": "INR"
+    },
+    "pricePaise": 19900,
+    "priceInrLabel": "\u20b9199.00"
+  },
+  {
+    "sku": "GROC-S07",
+    "name": "Cold-Pressed Mustard Oil 1L",
+    "priceSource": {
+      "value": 349,
+      "currency": "INR"
+    },
+    "pricePaise": 34900,
+    "priceInrLabel": "\u20b9349.00"
+  },
+  {
+    "sku": "GROC-S06",
+    "name": "Moong Dal 1kg",
+    "priceSource": {
+      "value": 169,
+      "currency": "INR"
+    },
+    "pricePaise": 16900,
+    "priceInrLabel": "\u20b9169.00"
+  },
+  {
+    "sku": "GROC-S05",
+    "name": "Toor Dal 1kg",
+    "priceSource": {
+      "value": 189,
+      "currency": "INR"
+    },
+    "pricePaise": 18900,
+    "priceInrLabel": "\u20b9189.00"
+  },
+  {
+    "sku": "GROC-S04",
+    "name": "Whole Wheat Atta 10kg",
+    "priceSource": {
+      "value": 649,
+      "currency": "INR"
+    },
+    "pricePaise": 64900,
+    "priceInrLabel": "\u20b9649.00"
+  },
+  {
+    "sku": "GROC-S03",
+    "name": "Whole Wheat Atta 5kg",
+    "priceSource": {
+      "value": 349,
+      "currency": "INR"
+    },
+    "pricePaise": 34900,
+    "priceInrLabel": "\u20b9349.00"
+  },
+  {
+    "sku": "GROC-S02",
+    "name": "Basmati Rice 5kg",
+    "priceSource": {
+      "value": 1299,
+      "currency": "INR"
+    },
+    "pricePaise": 129900,
+    "priceInrLabel": "\u20b91,299.00"
+  },
+  {
+    "sku": "GROC-S01",
+    "name": "Basmati Rice 1kg",
+    "priceSource": {
+      "value": 299,
+      "currency": "INR"
+    },
+    "pricePaise": 29900,
+    "priceInrLabel": "\u20b9299.00"
   }
 ]

@@ -16,7 +16,7 @@
 - 4:15 close + distribution line.
 
 ## Between takes
-`make reset` — re-seeds catalog (scripts/seed_fashion.js), clears carts + audit + links. Repeat step 0 flag check. Submitted take = the one that completes both arms.
+`make reset` — re-seeds grocery catalog (scripts/seed_grocery.js), clears carts + audit + links. Repeat step 0 flag check. Submitted take = the one that completes both arms.
 
 ## If something breaks live
 - Chip did not appear → check `/static/loader.js` reached the page (Network tab), MutationObserver re-inject after SPA nav (R3).

@@ -14,7 +14,7 @@
     {
       "id": "F001",
       "name": "Store clone & verification",
-      "description": "EverShop v2.2.1 cloned in-repo as plain files (Postgres \u2014 v2.2.1 dropped Mongo), fashion catalog seeded (22 products, Kids/Women/Men/Accessories, INR \u20b9299\u2013\u20b92,999), Unsplash images local, featured homepage grid, session-shim extension for upstream bug, CREDITS.md. Camera test pending user review.",
+      "description": "EverShop v2.2.1 cloned in-repo as plain files (Postgres \u2014 v2.2.1 dropped Mongo), grocery catalog seeded (47 products, Staples/Fresh Produce/Dairy & Bakery/Beverages/Snacks & Household, 5 categories, pack variants, 4 OOS, INR \u20b920\u2013\u20b91,299), loremflickr images local (image-first via fetch_grocery_images.js), featured homepage grid, session-shim extension for upstream bug, CREDITS.md. Camera test pending user review.",
       "status": "completed",
       "priority": "high",
       "module": "store/",
@@ -43,7 +43,7 @@
           "status": "planned"
         }
       ],
-      "notes": "in-repo, INR fashion catalog, Server.tsx 1-line loader injection, session-shim, credits \u2014 camera pass pending user review",
+      "notes": "in-repo, INR grocery catalog (47 SKUs, image-first), Server.tsx 1-line loader injection, session-shim, credits \u2014 camera pass pending user review",
       "added": "2026-09-01",
       "completed": "2026-09-01"
     },

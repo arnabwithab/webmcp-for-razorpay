@@ -37,11 +37,30 @@
   }
 
   function chip(text) {
-    if (lastChip) lastChip.remove();
+    // payment chip is persistent — don't clobber it on thinking/navigating
+    var payEl = document.getElementById('rzp-payment-chip');
+    if (lastChip && lastChip !== payEl) lastChip.remove();
+    if (text === '' && payEl) return; // keep payment chip visible when we would clear
     lastChip = document.createElement('span');
     lastChip.className = 'chip';
     lastChip.textContent = text;
     chips.appendChild(lastChip);
+  }
+  function paymentChip(url) {
+    var existing = document.getElementById('rzp-payment-chip');
+    if (existing) existing.remove();
+    var el = document.createElement('span');
+    el.id = 'rzp-payment-chip';
+    el.className = 'chip';
+    el.style.background = '#0b6bcb';
+    el.style.color = '#fff';
+    var a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    a.textContent = 'Open payment →';
+    a.style.cssText = 'color:#fff;text-decoration:none;';
+    el.appendChild(a);
+    chips.appendChild(el);
+    return el;
   }
 
   // replay a restored conversation (text parts only)
@@ -192,19 +211,7 @@
         if ((call.name === 'checkout' || call.name === 'resume-checkout') && response.result) {
           var r = response.result; if (typeof r === 'string') { try { r = JSON.parse(r); } catch (e) {} }
           var url = r && (r.shortUrl || r.short_url || r.url);
-          if (url) {
-            if (lastChip) lastChip.remove();
-            lastChip = document.createElement('span');
-            lastChip.className = 'chip';
-            var a = document.createElement('a');
-            a.href = url; a.target = '_blank'; a.rel = 'noopener';
-            a.textContent = 'Open payment →';
-            a.style.cssText = 'color:#fff;text-decoration:none;';
-            lastChip.style.background = '#0b6bcb';
-            lastChip.style.color = '#fff';
-            lastChip.appendChild(a);
-            chips.appendChild(lastChip);
-          }
+          if (url) paymentChip(url);
         }
         if (NAVIGATORS[call.name] && resultOk(response.result)) {
           chip('navigating…');
