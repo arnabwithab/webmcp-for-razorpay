@@ -188,6 +188,24 @@
         // destroying this iframe — the functionResponse must hit sessionStorage first
         messages.push({ role: 'user', parts: [{ functionResponse: { name: call.name, response: response } }] });
         save();
+        // checkout chip inside the (now draggable) agent panel — stays with the window
+        if ((call.name === 'checkout' || call.name === 'resume-checkout') && response.result) {
+          var r = response.result; if (typeof r === 'string') { try { r = JSON.parse(r); } catch (e) {} }
+          var url = r && (r.shortUrl || r.short_url || r.url);
+          if (url) {
+            if (lastChip) lastChip.remove();
+            lastChip = document.createElement('span');
+            lastChip.className = 'chip';
+            var a = document.createElement('a');
+            a.href = url; a.target = '_blank'; a.rel = 'noopener';
+            a.textContent = 'Open payment →';
+            a.style.cssText = 'color:#fff;text-decoration:none;';
+            lastChip.style.background = '#0b6bcb';
+            lastChip.style.color = '#fff';
+            lastChip.appendChild(a);
+            chips.appendChild(lastChip);
+          }
+        }
         if (NAVIGATORS[call.name] && resultOk(response.result)) {
           chip('navigating…');
           return; // page is unloading; resume on the fresh iframe continues the funnel
