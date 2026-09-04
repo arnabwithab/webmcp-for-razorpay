@@ -1,64 +1,80 @@
+<h1 align="center">WebMCP for Razorpay</h1>
+
 <p align="center">
-  <img src="https://img.shields.io/badge/build-make%20test-brightgreen?style=flat-square" alt="build">
   <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="version">
-  <img src="https://img.shields.io/badge/license-GPL--3.0%20(store)%20%2F%20MIT%20(ours)-lightgrey?style=flat-square" alt="license">
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
+  <img src="https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square" alt="python">
+  <img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square" alt="node">
+  <img src="https://img.shields.io/badge/postgres-16-4169E1?style=flat-square" alt="postgres">
   <img src="https://img.shields.io/badge/Razorpay-test%20mode-0b6bcb?style=flat-square" alt="razorpay">
-  <img src="https://img.shields.io/badge/LLM-Groq%20gpt--oss--120b-f55036?style=flat-square" alt="llm">
   <img src="https://img.shields.io/badge/W3C-WebMCP-8a2be2?style=flat-square" alt="webmcp">
+  <img src="https://img.shields.io/badge/EverShop-2.2.1-FF632B?style=flat-square" alt="evershop">
 </p>
 
-# Agent-Native Checkout Race
+<p align="center"><em>"Compressing discovery-to-order lifts total spend +28.5% and purchase frequency +43%"</em></p>
 
-WebMCP kit on a real store, timed vs manual — for the Razorpay Buildathon (Tracks 01 Agentic Commerce + 03 Revenue Recovery).
+This is what WebMCP implementations could achieve in any and every web-shop. Use in-shop agents, to compress discovery-to-order time.
 
-One `<script>` tag into a real open-source store (EverShop, in-repo) wired to Razorpay **test-mode** Payment Links. An in-browser agent drives the store end-to-end and races manual shopping on the same catalog — live-timed, discovery-to-payment. Spec: [`docs/spec.md`](docs/spec.md).
+W3C WebMCP turns any webshop's own features (search, filter, cart) into agent tools via webmcpify; our kit adds the money layer (`checkout`, `resume-checkout`) and Razorpay test-mode Payment Links settle it — raced live, agent vs manual, on the same EverShop catalog. Spec: [`docs/spec.md`](docs/spec.md).
 
 ## Architecture
 
-```
-Chrome (tiled, one take) ── both arms on the same store :8000
-  L: manual arm (overlay + capture listeners)   R: agent arm (WebMCP + iframe agent)
-        │                                              │
-        ▼                                              ▼
-  Sidecar :9000 (FastAPI)                    Agent backend :8001 (FastAPI)
-  checkout/create · event · webhook(HMAC)    /agent/turn → Groq gpt-oss-120b (stateless)
-  poll/{id} · compare · audit                loader.js · agent panel
-        ▼
-  Razorpay test-mode Payment Links
+```mermaid
+flowchart TB
+    subgraph Chrome["Chrome — one take, two profiles, same store :8000"]
+        Store["EverShop :8000<br/>+ loader.js injects kit"]
+        Manual["Manual arm — profile A<br/>overlay + capture listeners<br/>Start / Pay"]
+        AgentUI["Agent arm — profile B<br/>iframe :8001 allow='tools'<br/>agent.js loop: getTools → executeTool"]
+        Manual --- Store
+        AgentUI --- Store
+    end
+
+    subgraph Tools["WebMCP — 6 tools"]
+        StoreTools["4 store-native via webmcpify<br/>search-catalog · show-product<br/>add-to-cart · read-cart"]
+        MoneyTools["2 money via kit<br/>checkout · resume-checkout"]
+    end
+
+    AgentUI -- "getTools fromOrigins STORE" --> Tools
+    Tools -- "executeTool" --> Store
+
+    AgentUI -- "POST /agent/turn messages + tools" --> AgentBE["Agent backend :8001<br/>stateless Groq proxy<br/>key never in browser"]
+    AgentBE -- "tool call" --> AgentUI
+    AgentBE --> Groq["Groq gpt-oss-120b"]
+
+    Manual -- "POST /checkout/create<br/>POST /event · GET /poll" --> Sidecar["Sidecar :9000<br/>checkout · event · webhook HMAC<br/>poll · compare · audit"]
+    MoneyTools -- "POST /checkout/create<br/>POST /event" --> Sidecar
+
+    Sidecar -- "Payment Link + HMAC webhook" --> RZP["Razorpay test-mode<br/>Payment Links"]
+    Sidecar --> Audit["audit.jsonl hash-chained<br/>server ts authoritative"]
+
+    Store --> PG[(Postgres :5432 store DB)]
 ```
 
-## Quickstart
+## Local Setup
 
-```bash
-make db        # postgres container
-make setup     # deps (store npm + uv sync) + .env
-make seed      # grocery catalog (47 products, INR, image-first)
-make store     # store on :8000 (prod mode)
-make dev       # sidecar :9000 + agent :8001
-make snapshot  # canonical prices -> sidecar/snapshot.json
+1. Initial dependencies and store setup
+
+```
+cp .env.example .env  # Fill with Razorpay **test** keys + Groq key
+make db               # postgres container
+make setup            # deps (store npm + uv sync) + .env
+make seed             # grocery catalog (47 products, INR, image-first)
 ```
 
-Fill `.env` with Razorpay **test** keys + Groq key (see `.env.example`).
+2. Launch Store server
+
+```
+make store            # store on :8000
+```
+
+3. Spin up agent
+
+```
+make dev              # sidecar :9000 + agent :8001
+```
 
 ## Store credits (GPL-3.0)
 
-Store is [EverShop](https://github.com/evershopcommerce/evershop) v2.2.1 (commit `79ee0d0`), © The Nguyen / EverShop contributors, GPL-3.0 — see [`store/LICENSE`](store/LICENSE) and [`store/CREDITS.md`](store/CREDITS.md). Product photos: [Unsplash](https://unsplash.com) (Unsplash License), URLs listed in `store/CREDITS.md`.
+Store is [EverShop](https://github.com/evershopcommerce/evershop) v2.2.1 (commit `79ee0d0`), © The Nguyen / EverShop contributors, GPL-3.0 — see [`store/LICENSE`](store/LICENSE) and [`store/CREDITS.md`](store/CREDITS.md). 
 
-**Store touch list (audit per spec §4 budget):**
-| # | Change | Lines |
-|---|--------|-------|
-| 1 | `store/config/local.json` (port/currency/session config) | config only |
-| 2 | `store/media/grocery/` (47 local product images, image-first via `scripts/fetch_grocery_images.js`) | data only |
-| 3 | `store/extensions/session-shim/` — 6-line extension, upstream bug workaround (`/images` route crashes customer auth middleware; still broken upstream) | +6 (sanctioned extension hook, zero EverShop source touched) |
-| 4 | `store/.../Server.tsx` — 1 script tag `loader.js` on every frontStore page | 1 line (spec §4 budget line 1) |
-| 5 | `kit/webmcp-runtime.js` (vendored, MIT) + `kit/webmcp-store-tools.js` (4 store tools via `createToolScope`) — injected by loader | own line-item (spec §4 webmcpify count) |
-
-## Repo layout
-
-`sidecar/` (FastAPI :9000 — payments, events, audit, compare) · `agent/` (FastAPI :8001 — Groq proxy + panel) · `kit/` (money tools + manual arm, injected) · `scripts/seed_grocery.js` (grocery catalog seed, 47 SKUs) · `tests/` (pytest + JS smoke) · `docs/` (spec, runbook, features).
-
-## Commands
-
-See `make help` — `store`, `dev`, `db`, `seed`, `snapshot`, `reset`, `test`, `verify-audit`, `style`, `clean`, `setup`.
-
-Demo is localhost + Razorpay test mode + Groq free tier only. No production deploy (spec §3).
+Product photos: [Unsplash](https://unsplash.com) (Unsplash License), URLs listed in `store/CREDITS.md`.
